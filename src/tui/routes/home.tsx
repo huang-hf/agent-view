@@ -106,6 +106,7 @@ export function Home() {
   const [previewContent, setPreviewContent] = createSignal<string>("")
   const [previewLoading, setPreviewLoading] = createSignal(false)
   let scrollRef: ScrollBoxRenderable | undefined
+  let previewScrollRef: ScrollBoxRenderable | undefined
   let previewDebounceTimer: ReturnType<typeof setTimeout> | undefined
   let previewFetchAbort = false
 
@@ -181,6 +182,12 @@ export function Home() {
       setPreviewLoading(true)
     }
     previewFetchAbort = false
+    // Reset scroll position for new session
+    setTimeout(() => {
+      if (previewScrollRef) {
+        previewScrollRef.scrollTo(previewScrollRef.scrollHeight || 0)
+      }
+    }, 0)
 
     // Debounce: 150ms delay to prevent rapid fetching during navigation
     previewDebounceTimer = setTimeout(async () => {
@@ -194,6 +201,12 @@ export function Home() {
 
         if (!previewFetchAbort) {
           setPreviewContent(content)
+          // Scroll to bottom after render
+          setTimeout(() => {
+            if (previewScrollRef) {
+              previewScrollRef.scrollTo(previewScrollRef.scrollHeight || 0)
+            }
+          }, 0)
         }
       } catch {
         // Keep existing content on error, don't clear
@@ -965,7 +978,7 @@ export function Home() {
                   <PreviewHeader />
 
                   {/* Terminal output */}
-                  <scrollbox flexGrow={1} scrollbarOptions={{ visible: true }}>
+                  <scrollbox flexGrow={1} scrollbarOptions={{ visible: true }} ref={(r: ScrollBoxRenderable) => { previewScrollRef = r }}>
                     <Show
                       when={previewLines().length > 0}
                       fallback={
