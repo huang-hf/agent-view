@@ -18,6 +18,7 @@ import { DialogGroup } from "@tui/component/dialog-group"
 import { DialogMove } from "@tui/component/dialog-move"
 import { DialogShortcuts } from "@tui/component/dialog-shortcuts"
 import { DialogSettings } from "@tui/component/dialog-settings"
+import { DialogHelp } from "@tui/component/dialog-help"
 import { getShortcuts } from "@/core/config"
 import { executeShortcut, getShortcutGroupPath } from "@/core/shortcut"
 import { useKeybind } from "@tui/context/keybind"
@@ -493,7 +494,21 @@ export function Home() {
     if (evt.name === "r" && !evt.shift) {
       const session = selectedSession()
       if (session) {
-        handleRestart(session)
+        dialog.push(() => (
+          <DialogSelect
+            title={`Restart "${session.title}"?`}
+            options={[
+              { title: "Restart", value: "restart" },
+              { title: "Cancel", value: "cancel" },
+            ]}
+            onSelect={(opt) => {
+              dialog.clear()
+              if (opt.value === "restart") {
+                handleRestart(session)
+              }
+            }}
+          />
+        ))
       }
     }
 
@@ -579,6 +594,12 @@ export function Home() {
     // c to open settings dialog
     if (evt.name === "c" && !evt.shift && !evt.ctrl) {
       dialog.push(() => <DialogSettings />)
+      return
+    }
+
+    // ? to open help dialog
+    if (evt.name === "?") {
+      dialog.push(() => <DialogHelp />)
       return
     }
 
@@ -1021,6 +1042,10 @@ export function Home() {
         <box flexDirection="column" alignItems="center">
           <text fg={theme.text}>q</text>
           <text fg={theme.textMuted}>quit</text>
+        </box>
+        <box flexDirection="column" alignItems="center">
+          <text fg={theme.text}>?</text>
+          <text fg={theme.textMuted}>help</text>
         </box>
         <Show when={updateInfo()}>
           <box flexDirection="column" alignItems="center">
