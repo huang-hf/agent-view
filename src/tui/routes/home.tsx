@@ -25,7 +25,7 @@ import { executeShortcut, getShortcutGroupPath } from "@/core/shortcut"
 import { useKeybind } from "@tui/context/keybind"
 import { useKV } from "@tui/context/kv"
 import { DialogUpdate } from "@tui/component/dialog-update"
-import { attachSessionSync, capturePane, wasCommandPaletteRequested } from "@/core/tmux"
+import { attachSessionSync, capturePane, wasCommandPaletteRequested, sendKeys } from "@/core/tmux"
 import { useCommandDialog } from "@tui/component/dialog-command"
 import type { Session, Group } from "@/core/types"
 import { formatRelativeTime, formatSmartTime, truncatePath } from "@tui/util/locale"
@@ -586,6 +586,20 @@ export function Home() {
           return
         }
         handleHibernate(session)
+      }
+      return
+    }
+
+    // y to quick-confirm a waiting session (sends Enter without attaching)
+    if (evt.name === "y" && !evt.shift && !evt.ctrl) {
+      const session = selectedSession()
+      if (session && session.status === "waiting" && session.tmuxSession) {
+        sendKeys(session.tmuxSession, "").then(() => {
+          toast.show({ message: "✓ Confirmed", variant: "success", duration: 1500 })
+          sync.refresh()
+        }).catch((err) => {
+          toast.error(err as Error)
+        })
       }
       return
     }
