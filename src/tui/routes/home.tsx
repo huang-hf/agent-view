@@ -798,11 +798,12 @@ export function Home() {
         }}
         onMouseOver={() => setSelectedIndex(props.index)}
       >
-        {/* Status icon */}
-        <text fg={isSelected() ? theme.selectedListItemText : statusColor()}>
-          {STATUS_ICONS[props.session.status]}
-        </text>
-        <text> </text>
+        {/* Status icon with fixed width */}
+        <box width={2} flexShrink={0}>
+          <text fg={isSelected() ? theme.selectedListItemText : statusColor()}>
+            {STATUS_ICONS[props.session.status]}
+          </text>
+        </box>
 
         {/* Title */}
         <text
@@ -827,17 +828,17 @@ export function Home() {
         <Show when={props.session.status === "hibernated"} fallback={
           <Show when={sync.session.getMemoryMB(props.session.id)}>
             {(mb: () => number) => (
-              <>
+              <box flexShrink={0}>
                 <text fg={isSelected() ? theme.selectedListItemText : theme.textMuted}>
-                  {mb() >= 1024 ? `${(mb() / 1024).toFixed(1)}G` : `${mb()}M`}
+                  {" " + (mb() >= 1024 ? `${(mb() / 1024).toFixed(1)}G` : `${mb()}M`)}
                 </text>
-                <text> </text>
-              </>
+              </box>
             )}
           </Show>
         }>
-          <text>{"\uD83D\uDE34"}</text>
-          <text> </text>
+          <box flexShrink={0}>
+            <text>{" \uD83D\uDE34"}</text>
+          </box>
         </Show>
 
       </box>
