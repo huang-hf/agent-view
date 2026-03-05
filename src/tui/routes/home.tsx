@@ -25,7 +25,7 @@ import { executeShortcut, getShortcutGroupPath } from "@/core/shortcut"
 import { useKeybind } from "@tui/context/keybind"
 import { useKV } from "@tui/context/kv"
 import { DialogUpdate } from "@tui/component/dialog-update"
-import { attachSessionSync, capturePane, wasCommandPaletteRequested } from "@/core/tmux"
+import { attachSessionSync, capturePane, wasCommandPaletteRequested, sendKeys } from "@/core/tmux"
 import { useCommandDialog } from "@tui/component/dialog-command"
 import type { Session, Group } from "@/core/types"
 import { formatRelativeTime, formatSmartTime, truncatePath } from "@tui/util/locale"
@@ -106,6 +106,7 @@ export function Home() {
   const [previewContent, setPreviewContent] = createSignal<string>("")
   const [previewLoading, setPreviewLoading] = createSignal(false)
   let scrollRef: ScrollBoxRenderable | undefined
+  let previewScrollRef: ScrollBoxRenderable | undefined
   let previewDebounceTimer: ReturnType<typeof setTimeout> | undefined
   let previewFetchAbort = false
 
@@ -181,6 +182,12 @@ export function Home() {
       setPreviewLoading(true)
     }
     previewFetchAbort = false
+    // Reset scroll position for new session
+    setTimeout(() => {
+      if (previewScrollRef) {
+        previewScrollRef.scrollTo(previewScrollRef.scrollHeight || 0)
+      }
+    }, 0)
 
     // Debounce: 150ms delay to prevent rapid fetching during navigation
     previewDebounceTimer = setTimeout(async () => {
@@ -194,6 +201,12 @@ export function Home() {
 
         if (!previewFetchAbort) {
           setPreviewContent(content)
+          // Scroll to bottom after render
+          setTimeout(() => {
+            if (previewScrollRef) {
+              previewScrollRef.scrollTo(previewScrollRef.scrollHeight || 0)
+            }
+          }, 0)
         }
       } catch {
         // Keep existing content on error, don't clear
@@ -577,6 +590,20 @@ export function Home() {
       return
     }
 
+    // y to quick-confirm a waiting session (sends Enter without attaching)
+    if (evt.name === "y" && !evt.shift && !evt.ctrl) {
+      const session = selectedSession()
+      if (session && session.status === "waiting" && session.tmuxSession) {
+        sendKeys(session.tmuxSession, "").then(() => {
+          toast.show({ message: "✓ Confirmed", variant: "success", duration: 1500 })
+          sync.refresh()
+        }).catch((err) => {
+          toast.error(err as Error)
+        })
+      }
+      return
+    }
+
     // u to open update dialog
     if (evt.name === "u" && !evt.shift && !evt.ctrl) {
       const info = updateInfo()
@@ -807,6 +834,9 @@ export function Home() {
               <box flexDirection="row" gap={1}>
                 <text fg={statusColor()}>{STATUS_ICONS[s().status]}</text>
                 <text fg={statusColor()}>{s().status}</text>
+                <Show when={s().status === "waiting"}>
+                  <text fg={theme.warning}>  [y] confirm</text>
+                </Show>
               </box>
             </box>
 
@@ -965,7 +995,7 @@ export function Home() {
                   <PreviewHeader />
 
                   {/* Terminal output */}
-                  <scrollbox flexGrow={1} scrollbarOptions={{ visible: true }}>
+                  <scrollbox flexGrow={1} scrollbarOptions={{ visible: true }} ref={(r: ScrollBoxRenderable) => { previewScrollRef = r }}>
                     <Show
                       when={previewLines().length > 0}
                       fallback={
@@ -1034,6 +1064,12 @@ export function Home() {
           <text fg={theme.text}>z</text>
           <text fg={theme.textMuted}>hibernate</text>
         </box>
+        <Show when={selectedSession()?.status === "waiting"}>
+          <box flexDirection="column" alignItems="center">
+            <text fg={theme.warning}>y</text>
+            <text fg={theme.warning}>confirm</text>
+          </box>
+        </Show>
         <box flexDirection="column" alignItems="center">
           <text fg={theme.text}>o</text>
           <text fg={theme.textMuted}>recents</text>
