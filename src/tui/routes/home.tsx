@@ -28,7 +28,7 @@ import { DialogUpdate } from "@tui/component/dialog-update"
 import { attachSessionSync, capturePane, wasCommandPaletteRequested, sendKeys } from "@/core/tmux"
 import { useCommandDialog } from "@tui/component/dialog-command"
 import type { Session, Group } from "@/core/types"
-import { formatRelativeTime, formatSmartTime, truncatePath } from "@tui/util/locale"
+import { formatRelativeTime, truncatePath } from "@tui/util/locale"
 import { STATUS_ICONS } from "@tui/util/status"
 import { sortSessionsByCreatedAt } from "@tui/util/session"
 import { createListNavigation } from "@tui/util/navigation"
@@ -73,7 +73,9 @@ function stripAnsi(str: string): string {
 
 // Minimum width for dual-column layout
 const DUAL_COLUMN_MIN_WIDTH = 100
-const LEFT_PANEL_RATIO = 0.35
+const LEFT_PANEL_MIN_WIDTH = 30
+const LEFT_PANEL_MAX_RATIO = 0.5 // Never take more than 50% of screen
+const RIGHT_PANEL_MIN_WIDTH = 40 // Always leave room for preview
 
 export function Home() {
   const dimensions = useTerminalDimensions()
@@ -112,9 +114,32 @@ export function Home() {
 
   const useDualColumn = createMemo(() => dimensions().width >= DUAL_COLUMN_MIN_WIDTH)
 
+  // Calculate longest session/group title for dynamic panel sizing
+  const longestTitleLen = createMemo(() => {
+    const sessions = sync.session.list()
+    const groups = sync.group.list()
+    let maxLen = 0
+    for (const s of sessions) {
+      if (s.title.length > maxLen) maxLen = s.title.length
+    }
+    for (const g of groups) {
+      if (g.name.length > maxLen) maxLen = g.name.length
+    }
+    return maxLen
+  })
+
   const leftWidth = createMemo(() => {
     if (!useDualColumn()) return dimensions().width
-    return Math.floor(dimensions().width * LEFT_PANEL_RATIO)
+
+    // Fixed elements: padding(2) + indent(2) + status(2) + memory(6) = 12
+    const fixedWidth = 12
+    const neededWidth = longestTitleLen() + fixedWidth
+
+    const maxAllowed = Math.floor(dimensions().width * LEFT_PANEL_MAX_RATIO)
+    const minForPreview = dimensions().width - RIGHT_PANEL_MIN_WIDTH - 1
+
+    // Clamp: at least LEFT_PANEL_MIN_WIDTH, at most maxAllowed or what leaves room for preview
+    return Math.max(LEFT_PANEL_MIN_WIDTH, Math.min(neededWidth, maxAllowed, minForPreview))
   })
 
   const rightWidth = createMemo(() => {
@@ -737,12 +762,30 @@ export function Home() {
       }
     })
 
-    const maxTitleLen = useDualColumn() ? 15 : 20
-    const title = props.session.title.length > maxTitleLen
-      ? props.session.title.slice(0, maxTitleLen - 2) + ".."
-      : props.session.title
-
     const indent = props.indented ? 2 : 0
+
+    // Calculate available space for title dynamically
+    // Layout: [padding] [indent] [status icon + space] [title] [spacer] [tool?] [memory?] [time] [padding]
+    const reservedWidth = createMemo(() => {
+      let reserved = 2 // left + right padding
+      reserved += indent // indentation
+      reserved += 2 // status icon + space
+      reserved += 10 // time (e.g., "12:34 PM" or "yesterday")
+      reserved += 6 // memory indicator (e.g., "512M ")
+      if (!useDualColumn()) {
+        reserved += 8 // tool name + space in single column mode
+      }
+      reserved += 2 // minimum spacing
+      return reserved
+    })
+
+    const maxTitleLen = createMemo(() => Math.max(10, leftWidth() - reservedWidth()))
+    const title = createMemo(() => {
+      const max = maxTitleLen()
+      return props.session.title.length > max
+        ? props.session.title.slice(0, max - 2) + ".."
+        : props.session.title
+    })
 
     return (
       <box
@@ -768,7 +811,7 @@ export function Home() {
           fg={isSelected() ? theme.selectedListItemText : theme.text}
           attributes={isSelected() ? TextAttributes.BOLD : undefined}
         >
-          {title}
+          {title()}
         </text>
 
         {/* Spacer */}
@@ -799,10 +842,6 @@ export function Home() {
           <text> </text>
         </Show>
 
-        {/* Time */}
-        <text fg={isSelected() ? theme.selectedListItemText : theme.textMuted}>
-          {formatSmartTime(props.session.lastAccessed)}
-        </text>
       </box>
     )
   }
@@ -845,7 +884,7 @@ export function Home() {
               <text fg={theme.textMuted}>{truncatePath(s().projectPath, rightWidth() - 20)}</text>
             </box>
 
-            {/* More info */}
+            {/* Time and tool info */}
             <box flexDirection="row" gap={2} height={1}>
               <text fg={theme.accent}>{s().tool}</text>
               <text fg={theme.textMuted}>{formatRelativeTime(s().lastAccessed)}</text>
