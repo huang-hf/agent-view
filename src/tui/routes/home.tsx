@@ -765,17 +765,15 @@ export function Home() {
     const indent = props.indented ? 2 : 0
 
     // Calculate available space for title dynamically
-    // Layout: [padding] [indent] [status icon + space] [title] [spacer] [tool?] [memory?] [time] [padding]
+    // Layout: [padding] [indent] [status icon + space] [title] [spacer] [memory?] [padding]
     const reservedWidth = createMemo(() => {
       let reserved = 2 // left + right padding
       reserved += indent // indentation
       reserved += 2 // status icon + space
-      reserved += 10 // time (e.g., "12:34 PM" or "yesterday")
       reserved += 6 // memory indicator (e.g., "512M ")
       if (!useDualColumn()) {
         reserved += 8 // tool name + space in single column mode
       }
-      reserved += 2 // minimum spacing
       return reserved
     })
 
