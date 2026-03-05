@@ -1064,6 +1064,12 @@ export function Home() {
           <text fg={theme.text}>z</text>
           <text fg={theme.textMuted}>hibernate</text>
         </box>
+        <Show when={selectedSession()?.status === "waiting"}>
+          <box flexDirection="column" alignItems="center">
+            <text fg={theme.warning}>y</text>
+            <text fg={theme.warning}>confirm</text>
+          </box>
+        </Show>
         <box flexDirection="column" alignItems="center">
           <text fg={theme.text}>o</text>
           <text fg={theme.textMuted}>recents</text>
