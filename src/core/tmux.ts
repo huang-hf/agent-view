@@ -240,25 +240,11 @@ export async function killSession(name: string): Promise<void> {
 }
 
 export async function sendKeys(name: string, keys: string): Promise<void> {
-  const { spawnSync } = require("child_process")
-
-  // Send text literally (no key name interpretation)
-  const textArgs = tmuxSpawnArgs("send-keys", "-t", name, "-l", keys)
-  const textResult = spawnSync("tmux", textArgs, { stdio: "pipe" })
-  if (textResult.status !== 0) {
-    const stderr = textResult.stderr?.toString() || ""
-    throw new Error(`send-keys (text) failed: ${stderr}`)
+  // Send text literally first (if any), then Enter — fully async, never blocks the event loop
+  if (keys) {
+    await execAsync(tmuxCmd(`send-keys -t "${name}" -l "${keys}"`))
   }
-
-  // Small delay then send Enter separately
-  spawnSync("sleep", ["0.1"])
-
-  const enterArgs = tmuxSpawnArgs("send-keys", "-t", name, "Enter")
-  const enterResult = spawnSync("tmux", enterArgs, { stdio: "pipe" })
-  if (enterResult.status !== 0) {
-    const stderr = enterResult.stderr?.toString() || ""
-    throw new Error(`send-keys (enter) failed: ${stderr}`)
-  }
+  await execAsync(tmuxCmd(`send-keys -t "${name}" Enter`))
 }
 
 /**
