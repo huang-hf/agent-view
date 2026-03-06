@@ -12,6 +12,7 @@ import { useDialog } from "@tui/ui/dialog"
 import { DialogSelect } from "@tui/ui/dialog-select"
 import { useToast } from "@tui/ui/toast"
 import { DialogNew } from "@tui/component/dialog-new"
+import { DialogSessions } from "@tui/component/dialog-sessions"
 import { DialogFork } from "@tui/component/dialog-fork"
 import { DialogRename } from "@tui/component/dialog-rename"
 import { DialogGroup } from "@tui/component/dialog-group"
@@ -25,7 +26,7 @@ import { executeShortcut, getShortcutGroupPath } from "@/core/shortcut"
 import { useKeybind } from "@tui/context/keybind"
 import { useKV } from "@tui/context/kv"
 import { DialogUpdate } from "@tui/component/dialog-update"
-import { attachSessionSync, capturePane, wasCommandPaletteRequested, sendKeys } from "@/core/tmux"
+import { attachSessionSync, capturePane, wasCommandPaletteRequested, wasSessionListRequested, sendKeys } from "@/core/tmux"
 import { useCommandDialog } from "@tui/component/dialog-command"
 import type { Session, Group } from "@/core/types"
 import { formatRelativeTime, truncatePath } from "@tui/util/locale"
@@ -303,6 +304,10 @@ export function Home() {
     // Check if user pressed Ctrl+K to open command palette
     if (wasCommandPaletteRequested()) {
       command.open()
+    }
+    // Check if user pressed Ctrl+L to open session list
+    if (wasSessionListRequested()) {
+      dialog.replace(() => <DialogSessions />)
     }
   }
 

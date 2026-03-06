@@ -12,7 +12,7 @@ import { useRoute } from "@tui/context/route"
 import { useDialog } from "@tui/ui/dialog"
 import { useToast } from "@tui/ui/toast"
 import { DialogSelect, type DialogSelectOption } from "@tui/ui/dialog-select"
-import { attachSessionSync } from "@/core/tmux"
+import { attachSessionSync, wasSessionListRequested } from "@/core/tmux"
 import type { Session, SessionStatus } from "@/core/types"
 import { formatSmartTime, truncatePath } from "@tui/util/locale"
 import { STATUS_ICONS } from "@tui/util/status"
@@ -147,6 +147,11 @@ export function DialogSessions() {
     // Clear dialog and refresh after resume
     dialog.clear()
     sync.refresh()
+
+    // Check if user pressed Ctrl+L to reopen session list
+    if (wasSessionListRequested()) {
+      dialog.replace(() => <DialogSessions />)
+    }
   }
 
   return (

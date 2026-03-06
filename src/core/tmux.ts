@@ -26,8 +26,9 @@ const execFileAsync = promisify(execFile)
 
 export const SESSION_PREFIX = "agentorch_"
 
-// Signal file for command palette request
+// Signal files for UI requests from tmux keybinds
 const COMMAND_PALETTE_SIGNAL = "/tmp/agent-view-cmd-palette"
+const SESSION_LIST_SIGNAL = "/tmp/agent-view-session-list"
 
 // --- Isolated tmux server configuration ---
 // All agent-view sessions run on a dedicated tmux socket with a custom config,
@@ -597,6 +598,18 @@ export function wasCommandPaletteRequested(): boolean {
   return false
 }
 
+export function wasSessionListRequested(): boolean {
+  try {
+    if (fs.existsSync(SESSION_LIST_SIGNAL)) {
+      fs.unlinkSync(SESSION_LIST_SIGNAL)
+      return true
+    }
+  } catch {
+    // Ignore errors
+  }
+  return false
+}
+
 /**
  * Attach to a tmux session with Ctrl+Q to detach
  * Keybindings and status bar are configured via the custom tmux.conf,
@@ -674,6 +687,11 @@ export function attachSessionSync(sessionName: string): void {
 
   try {
     fs.unlinkSync(COMMAND_PALETTE_SIGNAL)
+  } catch {
+    // Ignore if doesn't exist
+  }
+  try {
+    fs.unlinkSync(SESSION_LIST_SIGNAL)
   } catch {
     // Ignore if doesn't exist
   }
