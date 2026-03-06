@@ -7,6 +7,8 @@ import { getStorage } from "./storage"
 import type { Session, SessionCreateOptions, SessionStatus, Tool, Recent } from "./types"
 import { getToolCommand } from "./types"
 import * as tmux from "./tmux"
+import { localExecutor, type TmuxExecutor } from "./tmux"
+import { getSshManager, SshTmuxExecutor } from "./ssh"
 import { removeWorktree } from "./git"
 import { randomUUID } from "crypto"
 import path from "path"
@@ -88,6 +90,27 @@ export class SessionManager {
     return resolved.next
   }
 
+  private remoteSessionCaches = new Map<string, Set<string>>() // host -> session names
+
+  private getExecutor(remoteHost: string): TmuxExecutor {
+    if (!remoteHost) return localExecutor
+    return new SshTmuxExecutor(remoteHost, getSshManager())
+  }
+
+  private updateRemoteCache(host: string, stdout: string): void {
+    const names = new Set<string>()
+    for (const line of stdout.trim().split("\n")) {
+      if (!line) continue
+      const [name] = line.replace(/^"/, "").split("\t")
+      if (name) names.add(name)
+    }
+    this.remoteSessionCaches.set(host, names)
+  }
+
+  remoteSessionExists(host: string, name: string): boolean {
+    return this.remoteSessionCaches.get(host)?.has(name) ?? false
+  }
+
   getMemoryKB(sessionId: string): number | undefined {
     return this.memoryMap.get(sessionId)
   }
@@ -121,15 +144,19 @@ export class SessionManager {
   }
 
   async refreshStatuses(): Promise<void> {
-    await tmux.refreshSessionCache()
-
     const storage = getStorage()
     const sessions = storage.loadSessions()
+
+    const localSessions = sessions.filter(s => !s.remoteHost)
+    const remoteSessions = sessions.filter(s => !!s.remoteHost)
+
+    // --- Local sessions (existing logic) ---
+    await tmux.refreshSessionCache()
 
     const config = getConfig()
     const autoHibernateMs = (config.autoHibernateMinutes || 0) * 60 * 1000
 
-    for (const session of sessions) {
+    for (const session of localSessions) {
       if (!session.tmuxSession) continue
 
       // Skip hibernated sessions — they have no tmux process
@@ -186,14 +213,76 @@ export class SessionManager {
       }
     }
 
+    // --- Remote sessions ---
+    const remoteHosts = new Set(remoteSessions.map(s => s.remoteHost))
+
+    for (const host of remoteHosts) {
+      const hostSessions = remoteSessions.filter(s => s.remoteHost === host)
+      const manager = getSshManager()
+
+      // Verify SSH connection is alive
+      const alive = await manager.check(host)
+      if (!alive) {
+        for (const session of hostSessions) {
+          storage.writeStatus(session.id, "offline", session.tool)
+        }
+        continue
+      }
+
+      const executor = this.getExecutor(host)
+
+      // Refresh remote session cache
+      try {
+        const stdout = await executor.exec([
+          "list-windows", "-a", "-F", "#{session_name}\t#{window_activity}"
+        ])
+        this.updateRemoteCache(host, stdout)
+      } catch {
+        for (const session of hostSessions) {
+          storage.writeStatus(session.id, "offline", session.tool)
+        }
+        continue
+      }
+
+      // Poll each remote session
+      for (const session of hostSessions) {
+        if (!session.tmuxSession) continue
+        if (session.status === "hibernated") continue
+
+        if (!this.remoteSessionExists(host, session.tmuxSession)) {
+          storage.writeStatus(session.id, "stopped", session.tool)
+          continue
+        }
+
+        try {
+          const output = await executor.exec([
+            "capture-pane", "-t", session.tmuxSession, "-p", "-S", "-100"
+          ])
+          const status = tmux.parseToolStatus(output, session.tool)
+
+          if (status.isWaiting) {
+            storage.writeStatus(session.id, "waiting", session.tool)
+          } else if (status.hasError) {
+            storage.writeStatus(session.id, "error", session.tool)
+          } else if (status.isBusy) {
+            storage.writeStatus(session.id, "running", session.tool)
+          } else {
+            storage.writeStatus(session.id, "idle", session.tool)
+          }
+        } catch {
+          storage.writeStatus(session.id, "offline", session.tool)
+        }
+      }
+    }
+
     storage.touch()
 
-    // Collect memory usage for all running sessions
-    const tmuxNames = sessions
+    // Collect memory usage for local running sessions only
+    const tmuxNames = localSessions
       .filter((s): s is Session & { tmuxSession: string } => !!s.tmuxSession && tmux.sessionExists(s.tmuxSession))
       .map(s => s.tmuxSession)
     const memMap = await tmux.getSessionsMemoryKB(tmuxNames)
-    for (const session of sessions) {
+    for (const session of localSessions) {
       if (session.tmuxSession && memMap.has(session.tmuxSession)) {
         this.memoryMap.set(session.id, memMap.get(session.tmuxSession)!)
       } else {
@@ -248,13 +337,28 @@ export class SessionManager {
     }
 
     try {
-      await tmux.createSession({
-        name: tmuxName,
-        command,
-        cwd: options.projectPath,
-        env,
-        windowTitle: title
-      })
+      if (options.remoteHost) {
+        // Remote session: create via SSH executor
+        const executor = this.getExecutor(options.remoteHost)
+        await executor.exec([
+          "new-session", "-d", "-s", tmuxName,
+          "-c", options.projectPath
+        ])
+        if (command) {
+          await executor.execFile([
+            "send-keys", "-t", tmuxName, "-l", command
+          ])
+          await executor.execFile(["send-keys", "-t", tmuxName, "Enter"])
+        }
+      } else {
+        await tmux.createSession({
+          name: tmuxName,
+          command,
+          cwd: options.projectPath,
+          env,
+          windowTitle: title
+        })
+      }
       log("tmux session created successfully")
     } catch (err) {
       log("tmux.createSession error:", err)
@@ -287,7 +391,8 @@ export class SessionManager {
       worktreeRepo: options.worktreeRepo || "",
       worktreeBranch: options.worktreeBranch || "",
       toolData,
-      acknowledged: false
+      acknowledged: false,
+      remoteHost: options.remoteHost || ""
     }
 
     storage.saveSession(session)
@@ -434,7 +539,12 @@ export class SessionManager {
     if (!session) return
 
     if (session.tmuxSession) {
-      await tmux.killSession(session.tmuxSession)
+      if (session.remoteHost) {
+        const executor = this.getExecutor(session.remoteHost)
+        await executor.exec(["kill-session", "-t", session.tmuxSession]).catch(() => {})
+      } else {
+        await tmux.killSession(session.tmuxSession)
+      }
     }
 
     storage.writeStatus(sessionId, "stopped", session.tool)
@@ -578,7 +688,8 @@ export class SessionManager {
       throw new Error(`Session not found or not running: ${sessionId}`)
     }
 
-    tmux.attachSession(session.tmuxSession)
+    const executor = this.getExecutor(session.remoteHost)
+    executor.spawnAttach(session.tmuxSession)
   }
 
   list(): Session[] {
