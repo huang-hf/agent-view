@@ -6,7 +6,7 @@
 import * as path from "path"
 import * as os from "os"
 import * as fs from "fs/promises"
-import type { Tool, Shortcut, Recent } from "./types"
+import type { Tool, Shortcut, Recent, RemoteHost } from "./types"
 
 export interface WorktreeConfig {
   defaultBaseBranch?: string
@@ -22,6 +22,7 @@ export interface AppConfig {
   recents?: Recent[]
   autoHibernateMinutes?: number   // 0 = disabled, default 0
   autoHibernatePrompted?: boolean // true = user has seen the prompt
+  remoteHosts?: RemoteHost[]
 }
 
 const CONFIG_DIR = path.join(os.homedir(), ".agent-view")
