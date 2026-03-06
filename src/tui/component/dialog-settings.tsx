@@ -216,7 +216,7 @@ export function DialogSettings() {
         const a = alias().trim()
         if (!a) { dialog.pop(); return }
         if (!/^[a-zA-Z0-9_.-]+$/.test(a)) {
-          toast.show({ message: "Invalid alias: use only letters, numbers, -, _, .", variant: "error" })
+          toast.show({ message: "Invalid alias: use only letters, numbers, -, _, .", variant: "error", duration: 3000 })
           return
         }
         const config = getConfig()
@@ -225,7 +225,7 @@ export function DialogSettings() {
           hosts.push({ alias: a })
           await saveConfig({ ...config, remoteHosts: hosts })
           getSshManager().connect(a).catch(() => {})
-          toast.show({ message: `Added ${a}`, variant: "success" })
+          toast.show({ message: `Added ${a}`, variant: "success", duration: 2000 })
         }
         dialog.pop()
         showRemoteHosts()
@@ -273,18 +273,19 @@ export function DialogSettings() {
         skipFilter
         onSelect={async (opt) => {
           if (opt.value === "test") {
-            toast.show({ message: `Testing ${alias}…`, variant: "info" })
+            toast.show({ message: `Testing ${alias}…`, variant: "info", duration: 2000 })
             const ok = await getSshManager().check(alias)
             toast.show({
               message: ok ? `✓ ${alias} connected` : `✗ ${alias} unreachable`,
-              variant: ok ? "success" : "error"
+              variant: ok ? "success" : "error",
+              duration: 3000
             })
           } else if (opt.value === "remove") {
             const config = getConfig()
             const hosts = (config.remoteHosts ?? []).filter(h => h.alias !== alias)
             await saveConfig({ ...config, remoteHosts: hosts })
             await getSshManager().disconnect(alias)
-            toast.show({ message: `Removed ${alias}`, variant: "success" })
+            toast.show({ message: `Removed ${alias}`, variant: "success", duration: 2000 })
             dialog.pop()
             showRemoteHosts()
           } else {
