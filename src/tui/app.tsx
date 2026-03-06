@@ -24,7 +24,8 @@ import { ThemeProvider, useTheme } from "@tui/context/theme"
 import { KeybindProvider, useKeybind } from "@tui/context/keybind"
 import { KVProvider, useKV } from "@tui/context/kv"
 import { ConfigProvider } from "@tui/context/config"
-import { loadConfig } from "@/core/config"
+import { loadConfig, getConfig } from "@/core/config"
+import { getSshManager } from "@/core/ssh"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
 import { ToastProvider, useToast } from "@tui/ui/toast"
 import { CommandProvider, useCommandDialog } from "@tui/component/dialog-command"
@@ -70,6 +71,14 @@ export async function tui(options: TuiOptions = {}) {
   // Load config from ~/.agent-view/config.json
   await loadConfig()
 
+  // Pre-connect to all configured remote hosts (non-fatal)
+  const config = getConfig()
+  for (const host of config.remoteHosts ?? []) {
+    getSshManager().connect(host.alias).catch(() => {
+      // Non-fatal: host will show as offline in TUI
+    })
+  }
+
   const mode = options.mode ?? (await detectTerminalMode())
 
   return new Promise<void>((resolve) => {
@@ -78,6 +87,7 @@ export async function tui(options: TuiOptions = {}) {
     const onExit = async () => {
       try {
         storage.close()
+        getSshManager().disconnectAll().catch(() => {})
         await options.onExit?.()
       } catch (e) {
         // Ignore cleanup errors
