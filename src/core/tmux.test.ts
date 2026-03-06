@@ -8,6 +8,8 @@ import {
   getSessionActivity,
   registerSessionInCache,
   isSessionActive,
+  LocalTmuxExecutor,
+  localExecutor,
 } from "./tmux"
 
 // Note: We need to access the internal sessionCache for testing
@@ -260,5 +262,18 @@ describe("session cache", () => {
 describe("SESSION_PREFIX constant", () => {
   test("has expected value", () => {
     expect(SESSION_PREFIX).toBe("agentorch_")
+  })
+})
+
+describe("LocalTmuxExecutor", () => {
+  test("implements TmuxExecutor interface", () => {
+    const executor = new LocalTmuxExecutor()
+    expect(typeof executor.exec).toBe("function")
+    expect(typeof executor.execFile).toBe("function")
+    expect(typeof executor.spawnAttach).toBe("function")
+  })
+
+  test("localExecutor is a LocalTmuxExecutor instance", () => {
+    expect(localExecutor).toBeInstanceOf(LocalTmuxExecutor)
   })
 })
