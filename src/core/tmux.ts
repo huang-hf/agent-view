@@ -24,6 +24,38 @@ async function getPty() {
 const execAsync = promisify(exec)
 const execFileAsync = promisify(execFile)
 
+/**
+ * Abstraction for executing tmux commands either locally or via SSH.
+ */
+export interface TmuxExecutor {
+  /** Run a tmux subcommand, return stdout */
+  exec(args: string[]): Promise<string>
+  /** Run a tmux subcommand that produces no relevant output */
+  execFile(args: string[]): Promise<void>
+  /** Full-screen attach (replaces current terminal process) */
+  spawnAttach(sessionName: string): void
+}
+
+export class LocalTmuxExecutor implements TmuxExecutor {
+  async exec(args: string[]): Promise<string> {
+    ensureConfig()
+    const { stdout } = await execAsync(
+      `tmux -L ${TMUX_SOCKET} -f "${CONFIG_PATH}" ${args.join(" ")}`
+    )
+    return stdout
+  }
+
+  async execFile(args: string[]): Promise<void> {
+    await execFileAsync("tmux", tmuxSpawnArgs(...args))
+  }
+
+  spawnAttach(sessionName: string): void {
+    attachSessionSync(sessionName)
+  }
+}
+
+export const localExecutor = new LocalTmuxExecutor()
+
 export const SESSION_PREFIX = "agentorch_"
 
 // Signal files for UI requests from tmux keybinds
