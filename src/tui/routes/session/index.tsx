@@ -11,7 +11,6 @@ import { useSync } from "@tui/context/sync"
 import { useRoute } from "@tui/context/route"
 import { useDialog } from "@tui/ui/dialog"
 import { useToast } from "@tui/ui/toast"
-import { useKeybind } from "@tui/context/keybind"
 import { DialogSessions } from "@tui/component/dialog-sessions"
 import { DialogRename } from "@tui/component/dialog-rename"
 import { useCommandDialog } from "@tui/component/dialog-command"
@@ -28,7 +27,6 @@ export function Session() {
   const dialog = useDialog()
   const toast = useToast()
   const command = useCommandDialog()
-  const keybind = useKeybind()
   const manager = getSessionManager()
 
   const sessionId = createMemo(() => {
@@ -90,40 +88,6 @@ export function Session() {
     }
   }
 
-  // Get ordered list of sessions for cycling
-  const orderedSessions = createMemo(() => {
-    const sessions = sync.session.list()
-    // Sort by lastAccessed descending (most recent first)
-    return [...sessions].sort((a, b) => b.lastAccessed - a.lastAccessed)
-  })
-
-  // Navigate to next/previous session
-  function cycleSession(direction: "next" | "prev") {
-    const sessions = orderedSessions()
-    if (sessions.length <= 1) return
-
-    const currentId = sessionId()
-    const currentIndex = sessions.findIndex((s) => s.id === currentId)
-    if (currentIndex === -1) return
-
-    let newIndex: number
-    if (direction === "next") {
-      newIndex = (currentIndex + 1) % sessions.length
-    } else {
-      newIndex = (currentIndex - 1 + sessions.length) % sessions.length
-    }
-
-    const nextSession = sessions[newIndex]
-    if (nextSession) {
-      route.navigate({ type: "session", sessionId: nextSession.id })
-      toast.show({
-        message: `Switched to: ${nextSession.title}`,
-        variant: "info",
-        duration: 1500
-      })
-    }
-  }
-
   // Keyboard shortcuts
   useKeyboard((evt) => {
     if (evt.name === "q" && !inputRef?.focused) {
@@ -135,14 +99,8 @@ export function Session() {
         dialog.replace(() => <DialogRename session={s} />)
       }
     }
-    if (keybind.match("session_list", evt)) {
+    if (evt.name === "l" && evt.ctrl) {
       dialog.replace(() => <DialogSessions />)
-    }
-    if (keybind.match("session_next", evt) && !inputRef?.focused) {
-      cycleSession("next")
-    }
-    if (keybind.match("session_prev", evt) && !inputRef?.focused) {
-      cycleSession("prev")
     }
     if (evt.name === "k" && evt.ctrl) {
       command.open()

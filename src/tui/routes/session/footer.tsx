@@ -29,10 +29,6 @@ export function SessionFooter(props: { session: Session }) {
       {/* Right: Keybind hints */}
       <box flexDirection="row" gap={2}>
         <text>
-          <span style={{ fg: theme.textMuted }}>[/]</span>
-          <span style={{ fg: theme.text }}> prev/next</span>
-        </text>
-        <text>
           <span style={{ fg: theme.textMuted }}>Ctrl+L</span>
           <span style={{ fg: theme.text }}> sessions</span>
         </text>

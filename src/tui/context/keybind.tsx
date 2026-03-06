@@ -24,8 +24,6 @@ const DEFAULT_KEYBINDS: KeybindConfig = {
   leader: "\\",
   session_list: ["ctrl+l", "<leader>l"],
   session_new: ["ctrl+n", "<leader>n"],
-  session_next: ["]", "ctrl+]"],
-  session_prev: ["[", "ctrl+["],
   command_palette: ["ctrl+k", "<leader>k"],
   help: ["?", "<leader>h"],
   quit: ["ctrl+q", "<leader>q"],
