@@ -38,10 +38,7 @@ export interface TmuxExecutor {
 
 export class LocalTmuxExecutor implements TmuxExecutor {
   async exec(args: string[]): Promise<string> {
-    ensureConfig()
-    const { stdout } = await execAsync(
-      `tmux -L ${TMUX_SOCKET} -f "${CONFIG_PATH}" ${args.join(" ")}`
-    )
+    const { stdout } = await execFileAsync("tmux", tmuxSpawnArgs(...args))
     return stdout
   }
 

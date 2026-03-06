@@ -139,6 +139,7 @@ export interface Config {
   keybinds?: Record<string, string>
   shortcuts?: Shortcut[]
   recents?: Recent[]
+  remoteHosts?: RemoteHost[]
 }
 
 export function isRemoteSession(session: Session): session is RemoteSession {

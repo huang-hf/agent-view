@@ -3,13 +3,14 @@
  * Manages agent-view sessions on remote machines via SSH
  */
 
-import { spawn } from "child_process"
+import { spawn, spawnSync } from "child_process"
 import { promisify } from "util"
 import { exec, execFile } from "child_process"
 import path from "path"
 import os from "os"
 import fs from "fs"
 import type { Session, RemoteSession, SessionStatus, Tool } from "./types"
+import type { TmuxExecutor } from "./tmux"
 
 const execAsync = promisify(exec)
 const execFileAsync = promisify(execFile)
@@ -18,6 +19,7 @@ const execFileAsync = promisify(execFile)
 const SSH_CONTROL_DIR = "/tmp/agent-view-ssh"
 const SSH_CONTROL_PERSIST = 600 // seconds
 const SSH_TIMEOUT = 10 // seconds
+const TMUX_SOCKET = "agent-view"
 
 const logFile = path.join(os.homedir(), ".agent-orchestrator", "debug.log")
 function log(...args: unknown[]) {
@@ -131,9 +133,6 @@ export class SSHRunner {
     }
   }
 
-  /**
-   * Attach to a remote session interactively via SSH
-   */
   attach(sessionId: string): void {
     log(`Attaching to remote session ${sessionId} on ${this.name}`)
 
@@ -385,16 +384,51 @@ export class SSHRunner {
   }
 }
 
+export type SshConnectionStatus = "connecting" | "connected" | "offline"
+
 export class SshControlManager {
+  private statusMap = new Map<string, SshConnectionStatus>()
+
+  getSocketPath(alias: string): string {
+    const safe = alias.replace(/[^a-zA-Z0-9_.-]/g, "_")
+    return path.join(SSH_CONTROL_DIR, `${safe}.sock`)
+  }
+
+  getStatus(alias: string): SshConnectionStatus {
+    return this.statusMap.get(alias) ?? "offline"
+  }
+
   async connect(alias: string): Promise<void> {
-    const args = [
-      ...sshOptions(alias),
-      "-fN",
-      alias
-    ]
-    await execFileAsync("ssh", args, {
-      timeout: SSH_TIMEOUT * 1000
-    })
+    if (this.statusMap.get(alias) === "connecting") return
+    this.statusMap.set(alias, "connecting")
+
+    const socketPath = this.getSocketPath(alias)
+    try {
+      await execFileAsync("ssh", [
+        "-o", `ControlPath=${socketPath}`,
+        "-O", "check",
+        alias
+      ])
+      this.statusMap.set(alias, "connected")
+      return
+    } catch {
+      // Socket not alive - start new ControlMaster.
+    }
+
+    try {
+      const args = [
+        ...sshOptions(alias),
+        "-fN",
+        alias
+      ]
+      await execFileAsync("ssh", args, {
+        timeout: SSH_TIMEOUT * 1000
+      })
+      this.statusMap.set(alias, "connected")
+    } catch (err) {
+      this.statusMap.set(alias, "offline")
+      throw err
+    }
   }
 
   async check(alias: string): Promise<boolean> {
@@ -407,8 +441,10 @@ export class SshControlManager {
       await execFileAsync("ssh", args, {
         timeout: SSH_TIMEOUT * 1000
       })
+      this.statusMap.set(alias, "connected")
       return true
     } catch {
+      this.statusMap.set(alias, "offline")
       return false
     }
   }
@@ -426,9 +462,60 @@ export class SshControlManager {
     } catch {
       // Ignore disconnect errors
     }
+    this.statusMap.set(alias, "offline")
+  }
+
+  async disconnectAll(): Promise<void> {
+    const aliases = [...this.statusMap.keys()]
+    await Promise.all(aliases.map(alias => this.disconnect(alias)))
+  }
+
+  async execRemote(alias: string, args: string[]): Promise<string> {
+    const socketPath = this.getSocketPath(alias)
+    const { stdout } = await execFileAsync("ssh", [
+      "-o", "ControlMaster=no",
+      "-o", `ControlPath=${socketPath}`,
+      alias,
+      ...args
+    ])
+    return stdout
   }
 }
 
+export class SshTmuxExecutor implements TmuxExecutor {
+  constructor(
+    private alias: string,
+    private manager: SshControlManager
+  ) {}
+
+  async exec(args: string[]): Promise<string> {
+    return this.manager.execRemote(this.alias, [
+      "tmux", "-L", TMUX_SOCKET, ...args
+    ])
+  }
+
+  async execFile(args: string[]): Promise<void> {
+    await this.manager.execRemote(this.alias, [
+      "tmux", "-L", TMUX_SOCKET, ...args
+    ])
+  }
+
+  spawnAttach(sessionName: string): void {
+    const socketPath = this.manager.getSocketPath(this.alias)
+
+    process.stdout.write("\x1b[?1049l\x1b[2J\x1b[H\x1b[?25h")
+
+    spawnSync("ssh", [
+      "-t",
+      "-o", "ControlMaster=no",
+      "-o", `ControlPath=${socketPath}`,
+      this.alias,
+      "tmux", "-L", TMUX_SOCKET, "attach-session", "-t", sessionName
+    ], { stdio: "inherit" })
+
+    process.stdout.write("\x1b[2J\x1b[H\x1b[?1049h\x1b]0;Agent View\x07")
+  }
+}
 let sshManagerSingleton: SshControlManager | null = null
 
 export function getSshManager(): SshControlManager {

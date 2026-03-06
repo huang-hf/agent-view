@@ -92,9 +92,15 @@ export class SessionManager {
 
   private remoteSessionCaches = new Map<string, Set<string>>() // host -> session names
 
+  private executorCache = new Map<string, TmuxExecutor>()
+
   private getExecutor(remoteHost: string): TmuxExecutor {
     if (!remoteHost) return localExecutor
-    return new SshTmuxExecutor(remoteHost, getSshManager())
+    const cached = this.executorCache.get(remoteHost)
+    if (cached) return cached
+    const executor = new SshTmuxExecutor(remoteHost, getSshManager())
+    this.executorCache.set(remoteHost, executor)
+    return executor
   }
 
   private updateRemoteCache(host: string, stdout: string): void {
@@ -423,7 +429,12 @@ export class SessionManager {
     const session = storage.getSession(sessionId)
 
     if (session?.tmuxSession) {
-      await tmux.killSession(session.tmuxSession)
+      if (session.remoteHost) {
+        const executor = this.getExecutor(session.remoteHost)
+        await executor.exec(["kill-session", "-t", session.tmuxSession]).catch(() => {})
+      } else {
+        await tmux.killSession(session.tmuxSession)
+      }
     }
 
     if (options?.deleteWorktree && session?.worktreePath && session?.worktreeRepo) {
@@ -447,7 +458,12 @@ export class SessionManager {
     }
 
     if (session.tmuxSession) {
-      await tmux.killSession(session.tmuxSession)
+      if (session.remoteHost) {
+        const executor = this.getExecutor(session.remoteHost)
+        await executor.exec(["kill-session", "-t", session.tmuxSession]).catch(() => {})
+      } else {
+        await tmux.killSession(session.tmuxSession)
+      }
     }
 
     // For Claude sessions with a claudeSessionId, resume the existing conversation
@@ -465,12 +481,14 @@ export class SessionManager {
     }
 
     const newTmuxName = tmux.generateSessionName(session.title)
-    await tmux.createSession({
-      name: newTmuxName,
-      command,
-      cwd: session.projectPath,
-      env
-    })
+    if (session.remoteHost) {
+      const executor = this.getExecutor(session.remoteHost)
+      await executor.exec(["new-session", "-d", "-s", newTmuxName, "-c", session.projectPath])
+      await executor.execFile(["send-keys", "-t", newTmuxName, "-l", command])
+      await executor.execFile(["send-keys", "-t", newTmuxName, "Enter"])
+    } else {
+      await tmux.createSession({ name: newTmuxName, command, cwd: session.projectPath, env })
+    }
 
     session.tmuxSession = newTmuxName
     session.command = command
@@ -492,7 +510,12 @@ export class SessionManager {
     }
 
     if (session.tmuxSession) {
-      await tmux.killSession(session.tmuxSession)
+      if (session.remoteHost) {
+        const executor = this.getExecutor(session.remoteHost)
+        await executor.exec(["kill-session", "-t", session.tmuxSession]).catch(() => {})
+      } else {
+        await tmux.killSession(session.tmuxSession)
+      }
     }
 
     // For Claude sessions, generate a fresh session ID to avoid reuse conflicts
@@ -508,12 +531,14 @@ export class SessionManager {
     }
 
     const newTmuxName = tmux.generateSessionName(session.title)
-    await tmux.createSession({
-      name: newTmuxName,
-      command,
-      cwd: session.projectPath,
-      env
-    })
+    if (session.remoteHost) {
+      const executor = this.getExecutor(session.remoteHost)
+      await executor.exec(["new-session", "-d", "-s", newTmuxName, "-c", session.projectPath])
+      await executor.execFile(["send-keys", "-t", newTmuxName, "-l", command])
+      await executor.execFile(["send-keys", "-t", newTmuxName, "Enter"])
+    } else {
+      await tmux.createSession({ name: newTmuxName, command, cwd: session.projectPath, env })
+    }
 
     session.tmuxSession = newTmuxName
     session.command = command
@@ -734,6 +759,7 @@ export class SessionManager {
     stopped: Session[]
     error: Session[]
     hibernated: Session[]
+    offline: Session[]
   } {
     const sessions = this.list()
     return {
@@ -742,7 +768,8 @@ export class SessionManager {
       idle: sessions.filter((s) => s.status === "idle"),
       stopped: sessions.filter((s) => s.status === "stopped"),
       error: sessions.filter((s) => s.status === "error"),
-      hibernated: sessions.filter((s) => s.status === "hibernated")
+      hibernated: sessions.filter((s) => s.status === "hibernated"),
+      offline: sessions.filter((s) => s.status === "offline")
     }
   }
 
