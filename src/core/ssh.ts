@@ -9,7 +9,7 @@
  * stores passwords or private key paths.
  */
 
-import { execFile, spawnSync } from "child_process"
+import { execFile, spawn, spawnSync } from "child_process"
 import { promisify } from "util"
 import path from "path"
 import os from "os"
@@ -19,7 +19,10 @@ import type { TmuxExecutor } from "./tmux"
 const execFileAsync = promisify(execFile)
 
 const SOCKET_DIR = path.join(os.homedir(), ".agent-view", "ssh-ctl")
+const LOCAL_TMUX_CONF = path.join(os.homedir(), ".agent-view", "tmux.conf")
 const TMUX_SOCKET = "agent-view"
+// Remote path where we upload the tmux.conf (relative, SSH expands ~)
+const REMOTE_TMUX_CONF = "~/.agent-view/tmux.conf"
 
 export type SshConnectionStatus = "connecting" | "connected" | "offline"
 
@@ -85,6 +88,34 @@ export class SshControlManager {
     } catch (err) {
       this.statusMap.set(alias, "offline")
       throw new Error(`SSH connection failed for '${alias}': ${err}`)
+    }
+
+    // Upload local tmux.conf to remote so Ctrl+Q detach binding works
+    await this.uploadTmuxConf(alias, socketPath)
+  }
+
+  /**
+   * Upload the local agent-view tmux.conf to the remote host.
+   * This ensures the remote tmux server uses the same key bindings (e.g. Ctrl+Q to detach).
+   */
+  private async uploadTmuxConf(alias: string, socketPath: string): Promise<void> {
+    try {
+      const confContent = fs.readFileSync(LOCAL_TMUX_CONF, "utf-8")
+      // Create remote dir and stream conf content via stdin (reuses ControlMaster socket)
+      await new Promise<void>((resolve, reject) => {
+        const child = spawn("ssh", [
+          "-o", "ControlMaster=no",
+          "-o", `ControlPath=${socketPath}`,
+          alias,
+          "sh", "-c", "mkdir -p ~/.agent-view && cat > ~/.agent-view/tmux.conf"
+        ])
+        child.stdin.write(confContent)
+        child.stdin.end()
+        child.on("close", (code) => code === 0 ? resolve() : reject(new Error(`upload exit ${code}`)))
+        child.on("error", reject)
+      })
+    } catch {
+      // Non-fatal: Ctrl+Q won't work but session will still function
     }
   }
 
@@ -158,16 +189,17 @@ export class SshTmuxExecutor implements TmuxExecutor {
     private manager: SshControlManager
   ) {}
 
+  private tmuxArgs(...args: string[]): string[] {
+    // Use the uploaded tmux.conf on the remote so Ctrl+Q detach binding works
+    return ["tmux", "-L", TMUX_SOCKET, "-f", REMOTE_TMUX_CONF, ...args]
+  }
+
   async exec(args: string[]): Promise<string> {
-    return this.manager.execRemote(this.alias, [
-      "tmux", "-L", TMUX_SOCKET, ...args
-    ])
+    return this.manager.execRemote(this.alias, this.tmuxArgs(...args))
   }
 
   async execFile(args: string[]): Promise<void> {
-    await this.manager.execRemote(this.alias, [
-      "tmux", "-L", TMUX_SOCKET, ...args
-    ])
+    await this.manager.execRemote(this.alias, this.tmuxArgs(...args))
   }
 
   spawnAttach(sessionName: string): void {
@@ -182,7 +214,7 @@ export class SshTmuxExecutor implements TmuxExecutor {
       "-o", "ControlMaster=no",
       "-o", `ControlPath=${socketPath}`,
       this.alias,
-      "tmux", "-L", TMUX_SOCKET, "attach-session", "-t", sessionName
+      ...this.tmuxArgs("attach-session", "-t", sessionName)
     ], { stdio: "inherit" })
 
     // Re-enter TUI alternate screen buffer
