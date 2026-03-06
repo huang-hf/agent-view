@@ -3,13 +3,20 @@
  * Exposes all config.json settings in the TUI
  */
 
+import { createSignal } from "solid-js"
+import { InputRenderable } from "@opentui/core"
+import { useKeyboard } from "@opentui/solid"
 import { useDialog } from "@tui/ui/dialog"
 import { DialogSelect } from "@tui/ui/dialog-select"
+import { DialogHeader } from "@tui/ui/dialog-header"
+import { DialogFooter } from "@tui/ui/dialog-footer"
+import { ActionButton } from "@tui/ui/action-button"
 import { useToast } from "@tui/ui/toast"
 import { useTheme } from "@tui/context/theme"
 import { useSync } from "@tui/context/sync"
 import { getConfig, loadConfig, saveConfig } from "@/core/config"
 import type { Tool } from "@/core/types"
+import { getSshManager } from "@/core/ssh"
 
 const TOOL_OPTIONS: { title: string; value: Tool }[] = [
   { title: "Claude Code", value: "claude" },
@@ -64,6 +71,11 @@ export function DialogSettings() {
         value: "autoHibernate" as const,
         footer: formatHibernate(config.autoHibernateMinutes || 0),
       },
+      {
+        title: "Remote hosts",
+        value: "remoteHosts" as const,
+        footer: `${(config.remoteHosts ?? []).length} configured`,
+      },
     ]
 
     dialog.replace(() => (
@@ -77,6 +89,7 @@ export function DialogSettings() {
             case "theme": return showTheme()
             case "defaultGroup": return showDefaultGroup()
             case "autoHibernate": return showAutoHibernate()
+            case "remoteHosts": return showRemoteHosts()
           }
         }}
       />
@@ -158,6 +171,122 @@ export function DialogSettings() {
         current={config.autoHibernateMinutes || 0}
         skipFilter
         onSelect={(opt) => updateConfig((c) => ({ ...c, autoHibernateMinutes: opt.value, autoHibernatePrompted: true }))}
+      />
+    ))
+  }
+
+  function showRemoteHosts() {
+    const config = getConfig()
+    const hosts = config.remoteHosts ?? []
+
+    const options = [
+      ...hosts.map(h => ({
+        title: h.label || h.alias,
+        value: `host:${h.alias}`,
+        footer: h.alias,
+      })),
+      { title: "+ Add remote host", value: "add", footer: "" },
+    ]
+
+    dialog.replace(() => (
+      <DialogSelect
+        title="Remote Hosts"
+        options={options}
+        skipFilter
+        onSelect={(opt) => {
+          if (opt.value === "add") {
+            showAddRemoteHost()
+          } else {
+            const alias = opt.value.replace("host:", "")
+            showRemoteHostActions(alias)
+          }
+        }}
+      />
+    ))
+  }
+
+  function showAddRemoteHost() {
+    const { theme } = themeCtx
+
+    dialog.push(() => {
+      const [alias, setAlias] = createSignal("")
+      let inputRef: InputRenderable | undefined
+
+      async function handleAdd() {
+        const a = alias().trim()
+        if (!a) { dialog.pop(); return }
+        const config = getConfig()
+        const hosts = [...(config.remoteHosts ?? [])]
+        if (!hosts.find(h => h.alias === a)) {
+          hosts.push({ alias: a })
+          await saveConfig({ ...config, remoteHosts: hosts })
+          getSshManager().connect(a).catch(() => {})
+          toast.show({ message: `Added ${a}`, variant: "success" })
+        }
+        dialog.pop()
+        showRemoteHosts()
+      }
+
+      useKeyboard((evt) => {
+        if (evt.name === "return" && !evt.shift) { evt.preventDefault(); handleAdd() }
+        if (evt.name === "escape") { evt.preventDefault(); dialog.pop() }
+      })
+
+      return (
+        <box gap={1} paddingBottom={1}>
+          <DialogHeader title="Add Remote Host" />
+          <box paddingLeft={4} paddingRight={4} paddingTop={1} gap={1}>
+            <text fg={theme.textMuted}>Enter the SSH alias from ~/.ssh/config:</text>
+            <input
+              placeholder="e.g. gpu-3090"
+              value={alias()}
+              onInput={setAlias}
+              focusedBackgroundColor={theme.backgroundElement}
+              cursorColor={theme.primary}
+              focusedTextColor={theme.text}
+              ref={(r) => {
+                inputRef = r
+                setTimeout(() => inputRef?.focus(), 1)
+              }}
+            />
+          </box>
+          <ActionButton label="Add" loadingLabel="Adding..." loading={false} onAction={handleAdd} />
+          <DialogFooter hint="Enter: add | Esc: cancel" />
+        </box>
+      )
+    })
+  }
+
+  function showRemoteHostActions(alias: string) {
+    dialog.push(() => (
+      <DialogSelect
+        title={`Host: ${alias}`}
+        options={[
+          { title: "Test connection", value: "test" },
+          { title: "Remove", value: "remove" },
+          { title: "Back", value: "back" },
+        ]}
+        skipFilter
+        onSelect={async (opt) => {
+          if (opt.value === "test") {
+            toast.show({ message: `Testing ${alias}…`, variant: "info" })
+            const ok = await getSshManager().check(alias)
+            toast.show({
+              message: ok ? `✓ ${alias} connected` : `✗ ${alias} unreachable`,
+              variant: ok ? "success" : "error"
+            })
+          } else if (opt.value === "remove") {
+            const config = getConfig()
+            const hosts = (config.remoteHosts ?? []).filter(h => h.alias !== alias)
+            await saveConfig({ ...config, remoteHosts: hosts })
+            await getSshManager().disconnect(alias)
+            toast.show({ message: `Removed ${alias}`, variant: "success" })
+            dialog.pop()
+            showRemoteHosts()
+          } else {
+            dialog.pop()
+          }
+        }}
       />
     ))
   }
