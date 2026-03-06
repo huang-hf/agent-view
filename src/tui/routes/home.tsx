@@ -23,6 +23,8 @@ import { DialogSettings } from "@tui/component/dialog-settings"
 import { DialogNewRemote } from "@tui/component/dialog-new-remote"
 import { DialogHelp } from "@tui/component/dialog-help"
 import { getShortcuts } from "@/core/config"
+import { getSessionManager } from "@/core/session"
+import { getSshManager } from "@/core/ssh"
 import { executeShortcut, getShortcutGroupPath } from "@/core/shortcut"
 import { useKeybind } from "@tui/context/keybind"
 import { useKV } from "@tui/context/kv"
@@ -904,6 +906,7 @@ export function Home() {
         case "waiting": return theme.warning
         case "error": return theme.error
         case "hibernated": return theme.secondary
+        case "offline": return theme.textMuted
         default: return theme.textMuted
       }
     })
@@ -959,6 +962,13 @@ export function Home() {
             {STATUS_ICONS[props.session.status]}
           </text>
         </box>
+
+        {/* Remote host tag */}
+        <Show when={props.session.remoteHost}>
+          <text fg={isSelected() ? theme.selectedListItemText : theme.textMuted}>
+            [{props.session.remoteHost}]{" "}
+          </text>
+        </Show>
 
         {/* Title */}
         <text
@@ -1054,6 +1064,22 @@ export function Home() {
               </Show>
               <Show when={isRemoteSession(s())}>
                 <text fg={theme.info}>@{(s() as RemoteSession).remoteName}</text>
+                {() => {
+                  const remote = s() as RemoteSession
+                  const sshStatus = getSshManager().getStatus(remote.remoteHost)
+                  const indicator = sshStatus === "connected" ? "●"
+                    : sshStatus === "connecting" ? "…"
+                    : "○"
+                  const color = sshStatus === "connected" ? theme.success
+                    : sshStatus === "connecting" ? theme.warning
+                    : theme.textMuted
+                  return (
+                    <>
+                      <text fg={theme.info}>@{remote.remoteName}</text>
+                      <text fg={color}>{indicator} {remote.remoteHost}</text>
+                    </>
+                  )
+                }}
               </Show>
             </box>
 
