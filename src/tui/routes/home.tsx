@@ -221,6 +221,13 @@ export function Home() {
       if (previewFetchAbort) return
 
       try {
+        // Remote sessions: capturePane is handled by the status poll loop via SSH executor.
+        // Avoid issuing a local tmux call which would fail or capture the wrong session.
+        if (session.remoteHost) {
+          setPreviewLoading(false)
+          return
+        }
+
         const content = await capturePane(session.tmuxSession, {
           startLine: -200, // Last 200 lines
           join: true

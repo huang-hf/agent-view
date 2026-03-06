@@ -52,6 +52,8 @@ export class SshControlManager {
    * Idempotent — safe to call multiple times.
    */
   async connect(alias: string): Promise<void> {
+    // Guard against concurrent connect() calls for the same alias
+    if (this.statusMap.get(alias) === "connecting") return
     const socketPath = this.getSocketPath(alias)
     this.statusMap.set(alias, "connecting")
 
