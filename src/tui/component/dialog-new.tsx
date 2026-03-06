@@ -241,12 +241,18 @@ export function DialogNew(props?: { prefill?: SavedFormState }) {
       }
 
       let sessionProjectPath = projectPath().trim() || process.cwd()
-      // Expand ~ to home directory (shell doesn't do this for us)
-      if (sessionProjectPath.startsWith("~")) {
-        sessionProjectPath = sessionProjectPath.replace("~", process.env.HOME || "")
-      }
-      if (!existsSync(sessionProjectPath)) {
-        throw new Error(`Directory '${sessionProjectPath}' does not exist`)
+
+      if (selectedRemoteHost()) {
+        // Remote session: skip local path validation entirely.
+        // The path lives on the remote server; let tmux handle ~ expansion.
+      } else {
+        // Local session: expand ~ and verify the directory exists
+        if (sessionProjectPath.startsWith("~")) {
+          sessionProjectPath = sessionProjectPath.replace("~", process.env.HOME || "")
+        }
+        if (!existsSync(sessionProjectPath)) {
+          throw new Error(`Directory '${sessionProjectPath}' does not exist`)
+        }
       }
 
       // Only check command existence for local sessions

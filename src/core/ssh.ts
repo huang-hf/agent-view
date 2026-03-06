@@ -19,7 +19,10 @@ const execFileAsync = promisify(execFile)
 const SSH_CONTROL_DIR = "/tmp/agent-view-ssh"
 const SSH_CONTROL_PERSIST = 600 // seconds
 const SSH_TIMEOUT = 10 // seconds
+const LOCAL_TMUX_CONF = path.join(os.homedir(), ".agent-view", "tmux.conf")
 const TMUX_SOCKET = "agent-view"
+// Remote path where we upload the tmux.conf (relative, SSH expands ~)
+const REMOTE_TMUX_CONF = "~/.agent-view/tmux.conf"
 
 const logFile = path.join(os.homedir(), ".agent-orchestrator", "debug.log")
 function log(...args: unknown[]) {
@@ -429,6 +432,34 @@ export class SshControlManager {
       this.statusMap.set(alias, "offline")
       throw err
     }
+
+    // Upload local tmux.conf to remote so Ctrl+Q detach binding works
+    await this.uploadTmuxConf(alias, socketPath)
+  }
+
+  /**
+   * Upload the local agent-view tmux.conf to the remote host.
+   * This ensures the remote tmux server uses the same key bindings (e.g. Ctrl+Q to detach).
+   */
+  private async uploadTmuxConf(alias: string, socketPath: string): Promise<void> {
+    try {
+      const confContent = fs.readFileSync(LOCAL_TMUX_CONF, "utf-8")
+      // Create remote dir and stream conf content via stdin (reuses ControlMaster socket)
+      await new Promise<void>((resolve, reject) => {
+        const child = spawn("ssh", [
+          "-o", "ControlMaster=no",
+          "-o", `ControlPath=${socketPath}`,
+          alias,
+          "sh", "-c", "mkdir -p ~/.agent-view && cat > ~/.agent-view/tmux.conf"
+        ])
+        child.stdin.write(confContent)
+        child.stdin.end()
+        child.on("close", (code) => code === 0 ? resolve() : reject(new Error(`upload exit ${code}`)))
+        child.on("error", reject)
+      })
+    } catch {
+      // Non-fatal: Ctrl+Q won't work but session will still function
+    }
   }
 
   async check(alias: string): Promise<boolean> {
@@ -488,16 +519,17 @@ export class SshTmuxExecutor implements TmuxExecutor {
     private manager: SshControlManager
   ) {}
 
+  private tmuxArgs(...args: string[]): string[] {
+    // Use the uploaded tmux.conf on the remote so Ctrl+Q detach binding works
+    return ["tmux", "-L", TMUX_SOCKET, "-f", REMOTE_TMUX_CONF, ...args]
+  }
+
   async exec(args: string[]): Promise<string> {
-    return this.manager.execRemote(this.alias, [
-      "tmux", "-L", TMUX_SOCKET, ...args
-    ])
+    return this.manager.execRemote(this.alias, this.tmuxArgs(...args))
   }
 
   async execFile(args: string[]): Promise<void> {
-    await this.manager.execRemote(this.alias, [
-      "tmux", "-L", TMUX_SOCKET, ...args
-    ])
+    await this.manager.execRemote(this.alias, this.tmuxArgs(...args))
   }
 
   spawnAttach(sessionName: string): void {
@@ -510,7 +542,7 @@ export class SshTmuxExecutor implements TmuxExecutor {
       "-o", "ControlMaster=no",
       "-o", `ControlPath=${socketPath}`,
       this.alias,
-      "tmux", "-L", TMUX_SOCKET, "attach-session", "-t", sessionName
+      ...this.tmuxArgs("attach-session", "-t", sessionName)
     ], { stdio: "inherit" })
 
     process.stdout.write("\x1b[2J\x1b[H\x1b[?1049h\x1b]0;Agent View\x07")
