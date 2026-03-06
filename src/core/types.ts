@@ -10,6 +10,7 @@ export type SessionStatus =
   | "error"       // Session has an error
   | "stopped"     // Session was explicitly stopped
   | "hibernated"  // Paused to save memory, expected to resume
+  | "offline"     // Remote host unreachable
 
 export type Tool =
   | "claude"      // Claude Code
@@ -38,6 +39,7 @@ export interface Session {
   worktreeBranch: string
   toolData: Record<string, unknown>
   acknowledged: boolean
+  remoteHost: string   // SSH alias; empty string = local
 }
 
 export interface RemoteSession extends Session {
@@ -93,6 +95,7 @@ export interface SessionCreateOptions {
   worktreeRepo?: string
   worktreeBranch?: string
   claudeOptions?: ClaudeOptions
+  remoteHost?: string
 }
 
 export interface WorktreeConfig {
@@ -120,6 +123,11 @@ export interface Recent {
   remoteHost?: string  // SSH host for remote sessions
   remoteAvPath?: string // av binary path on remote
   command?: string     // Custom command (when tool === "custom")
+}
+
+export interface RemoteHost {
+  alias: string    // Must match a Host entry in ~/.ssh/config
+  label?: string   // Optional display name (defaults to alias)
 }
 
 export interface Config {
