@@ -6,7 +6,7 @@
  * to avoid conflicts with the user's tmux configuration.
  */
 
-import { spawn, exec } from "child_process"
+import { spawn, exec, execFile } from "child_process"
 import { promisify } from "util"
 import path from "path"
 import os from "os"
@@ -22,6 +22,7 @@ async function getPty() {
 }
 
 const execAsync = promisify(exec)
+const execFileAsync = promisify(execFile)
 
 export const SESSION_PREFIX = "agentorch_"
 
@@ -240,11 +241,12 @@ export async function killSession(name: string): Promise<void> {
 }
 
 export async function sendKeys(name: string, keys: string): Promise<void> {
-  // Send text literally first (if any), then Enter — fully async, never blocks the event loop
+  // Use execFile + tmuxSpawnArgs (argument array) to prevent shell injection —
+  // values are passed directly to the process, never interpreted by a shell.
   if (keys) {
-    await execAsync(tmuxCmd(`send-keys -t "${name}" -l "${keys}"`))
+    await execFileAsync("tmux", tmuxSpawnArgs("send-keys", "-t", name, "-l", keys))
   }
-  await execAsync(tmuxCmd(`send-keys -t "${name}" Enter`))
+  await execFileAsync("tmux", tmuxSpawnArgs("send-keys", "-t", name, "Enter"))
 }
 
 /**
