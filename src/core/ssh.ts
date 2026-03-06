@@ -9,7 +9,7 @@
  * stores passwords or private key paths.
  */
 
-import { execFile, spawn } from "child_process"
+import { execFile, spawnSync } from "child_process"
 import { promisify } from "util"
 import path from "path"
 import os from "os"
@@ -174,8 +174,8 @@ export class SshTmuxExecutor implements TmuxExecutor {
     // Exit TUI alternate screen buffer
     process.stdout.write("\x1b[?1049l\x1b[2J\x1b[H\x1b[?25h")
 
-    // SSH -t for interactive PTY, attach to remote tmux session
-    const child = spawn("ssh", [
+    // SSH -t for interactive PTY, attach to remote tmux session (blocking)
+    spawnSync("ssh", [
       "-t",
       "-o", "ControlMaster=no",
       "-o", `ControlPath=${socketPath}`,
@@ -183,10 +183,8 @@ export class SshTmuxExecutor implements TmuxExecutor {
       "tmux", "-L", TMUX_SOCKET, "attach-session", "-t", sessionName
     ], { stdio: "inherit" })
 
-    child.on("exit", () => {
-      // Re-enter TUI alternate screen buffer
-      process.stdout.write("\x1b[2J\x1b[H\x1b[?1049h\x1b]0;Agent View\x07")
-    })
+    // Re-enter TUI alternate screen buffer
+    process.stdout.write("\x1b[2J\x1b[H\x1b[?1049h\x1b]0;Agent View\x07")
   }
 }
 
