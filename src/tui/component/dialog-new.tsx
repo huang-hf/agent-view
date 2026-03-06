@@ -10,7 +10,6 @@ import { useSync } from "@tui/context/sync"
 import { useRoute } from "@tui/context/route"
 import { useConfig } from "@tui/context/config"
 import { useDialog, scrollDialogBy, scrollDialogTo } from "@tui/ui/dialog"
-import { DialogSelect } from "@tui/ui/dialog-select"
 import { useToast } from "@tui/ui/toast"
 import { InputAutocomplete } from "@tui/ui/input-autocomplete"
 import { DialogHeader } from "@tui/ui/dialog-header"
@@ -111,6 +110,8 @@ export function DialogNew() {
 
   const [focusedField, setFocusedField] = createSignal<FocusField>("title")
   const [toolIndex, setToolIndex] = createSignal(defaultToolIndex >= 0 ? defaultToolIndex : 0)
+  const [showConfirm, setShowConfirm] = createSignal(false)
+  const [confirmLines, setConfirmLines] = createSignal<string[]>([])
 
   let titleInputRef: InputRenderable | undefined
   let customCommandInputRef: InputRenderable | undefined
@@ -324,24 +325,27 @@ export function DialogNew() {
       }
     }
 
-    dialog.push(() => (
-      <DialogSelect
-        title={`Create session?\n\n${lines.join("\n")}`}
-        options={[
-          { title: "✅ Confirm", value: "confirm" },
-          { title: "❌ Back", value: "back" },
-        ]}
-        onSelect={(opt) => {
-          dialog.pop()
-          if (opt.value === "confirm") {
-            doCreate()
-          }
-        }}
-      />
-    ))
+    setConfirmLines(lines)
+    setShowConfirm(true)
   }
 
   useKeyboard((evt) => {
+    if (showConfirm()) {
+      if (evt.name === "escape") {
+        evt.preventDefault()
+        setShowConfirm(false)
+        return
+      }
+      if (evt.name === "return" && !evt.shift) {
+        evt.preventDefault()
+        setShowConfirm(false)
+        doCreate()
+        return
+      }
+      evt.preventDefault()
+      return
+    }
+
     if (evt.name === "escape") {
       evt.preventDefault()
       dialog.clear()
@@ -436,6 +440,16 @@ export function DialogNew() {
 
   return (
     <box gap={1} paddingBottom={1}>
+      <Show when={showConfirm()}>
+        <DialogHeader title="Create session?" />
+        <box paddingLeft={4} paddingRight={4} paddingTop={1} gap={1}>
+          <For each={confirmLines()}>
+            {(line) => <text fg={theme.text}>{line}</text>}
+          </For>
+        </box>
+        <DialogFooter hint="Enter: confirm | Esc: back" />
+      </Show>
+      <Show when={!showConfirm()}>
       <DialogHeader title="New Session" />
 
       {/* Title field */}
@@ -683,6 +697,7 @@ export function DialogNew() {
       />
 
       <DialogFooter hint={creating() ? statusMessage() : (focusedField() === "path" || focusedField() === "branch") ? "↓↑ browse | Tab/→ select | Enter create" : "Tab | Enter: create"} />
+      </Show>
     </box>
   )
 }
