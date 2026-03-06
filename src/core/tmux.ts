@@ -6,7 +6,7 @@
  * to avoid conflicts with the user's tmux configuration.
  */
 
-import { spawn, exec } from "child_process"
+import { spawn, exec, execFile } from "child_process"
 import { promisify } from "util"
 import path from "path"
 import os from "os"
@@ -22,6 +22,7 @@ async function getPty() {
 }
 
 const execAsync = promisify(exec)
+const execFileAsync = promisify(execFile)
 
 export const SESSION_PREFIX = "agentorch_"
 
@@ -240,25 +241,12 @@ export async function killSession(name: string): Promise<void> {
 }
 
 export async function sendKeys(name: string, keys: string): Promise<void> {
-  const { spawnSync } = require("child_process")
-
-  // Send text literally (no key name interpretation)
-  const textArgs = tmuxSpawnArgs("send-keys", "-t", name, "-l", keys)
-  const textResult = spawnSync("tmux", textArgs, { stdio: "pipe" })
-  if (textResult.status !== 0) {
-    const stderr = textResult.stderr?.toString() || ""
-    throw new Error(`send-keys (text) failed: ${stderr}`)
+  // Use execFile + tmuxSpawnArgs (argument array) to prevent shell injection —
+  // values are passed directly to the process, never interpreted by a shell.
+  if (keys) {
+    await execFileAsync("tmux", tmuxSpawnArgs("send-keys", "-t", name, "-l", keys))
   }
-
-  // Small delay then send Enter separately
-  spawnSync("sleep", ["0.1"])
-
-  const enterArgs = tmuxSpawnArgs("send-keys", "-t", name, "Enter")
-  const enterResult = spawnSync("tmux", enterArgs, { stdio: "pipe" })
-  if (enterResult.status !== 0) {
-    const stderr = enterResult.stderr?.toString() || ""
-    throw new Error(`send-keys (enter) failed: ${stderr}`)
-  }
+  await execFileAsync("tmux", tmuxSpawnArgs("send-keys", "-t", name, "Enter"))
 }
 
 /**
