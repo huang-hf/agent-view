@@ -215,6 +215,10 @@ export function DialogSettings() {
       async function handleAdd() {
         const a = alias().trim()
         if (!a) { dialog.pop(); return }
+        if (!/^[a-zA-Z0-9_.-]+$/.test(a)) {
+          toast.show({ message: "Invalid alias: use only letters, numbers, -, _, .", variant: "error" })
+          return
+        }
         const config = getConfig()
         const hosts = [...(config.remoteHosts ?? [])]
         if (!hosts.find(h => h.alias === a)) {
