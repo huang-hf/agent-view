@@ -344,18 +344,15 @@ export class SessionManager {
 
     try {
       if (options.remoteHost) {
-        // Remote session: create via SSH executor
+        // Remote session: create via SSH executor.
+        // Pass command directly to new-session to avoid send-keys -l which
+        // requires a tmux client and fails on detached-only servers.
         const executor = this.getExecutor(options.remoteHost)
-        await executor.exec([
-          "new-session", "-d", "-s", tmuxName,
-          "-c", options.projectPath
-        ])
-        if (command) {
-          await executor.execFile([
-            "send-keys", "-t", tmuxName, "-l", command
-          ])
-          await executor.execFile(["send-keys", "-t", tmuxName, "Enter"])
-        }
+        const newSessionArgs = [
+          "new-session", "-d", "-s", tmuxName, "-c", options.projectPath
+        ]
+        if (command) newSessionArgs.push(command)
+        await executor.exec(newSessionArgs)
       } else {
         await tmux.createSession({
           name: tmuxName,
@@ -483,9 +480,9 @@ export class SessionManager {
     const newTmuxName = tmux.generateSessionName(session.title)
     if (session.remoteHost) {
       const executor = this.getExecutor(session.remoteHost)
-      await executor.exec(["new-session", "-d", "-s", newTmuxName, "-c", session.projectPath])
-      await executor.execFile(["send-keys", "-t", newTmuxName, "-l", command])
-      await executor.execFile(["send-keys", "-t", newTmuxName, "Enter"])
+      const args = ["new-session", "-d", "-s", newTmuxName, "-c", session.projectPath]
+      if (command) args.push(command)
+      await executor.exec(args)
     } else {
       await tmux.createSession({ name: newTmuxName, command, cwd: session.projectPath, env })
     }
@@ -533,9 +530,9 @@ export class SessionManager {
     const newTmuxName = tmux.generateSessionName(session.title)
     if (session.remoteHost) {
       const executor = this.getExecutor(session.remoteHost)
-      await executor.exec(["new-session", "-d", "-s", newTmuxName, "-c", session.projectPath])
-      await executor.execFile(["send-keys", "-t", newTmuxName, "-l", command])
-      await executor.execFile(["send-keys", "-t", newTmuxName, "Enter"])
+      const args = ["new-session", "-d", "-s", newTmuxName, "-c", session.projectPath]
+      if (command) args.push(command)
+      await executor.exec(args)
     } else {
       await tmux.createSession({ name: newTmuxName, command, cwd: session.projectPath, env })
     }
