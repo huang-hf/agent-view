@@ -67,7 +67,7 @@ export function DialogSettings() {
       {
         title: "Copy .claude to worktree",
         value: "copyClaudeDir" as const,
-        footer: (config.copyClaudeDir !== false) ? "Yes" : "No",
+        footer: (config.copyClaudeDir === true) ? "Yes" : "No",
       },
     ]
 
@@ -178,7 +178,7 @@ export function DialogSettings() {
       <DialogSelect
         title="Copy .claude to worktree"
         options={options}
-        current={config.copyClaudeDir !== false}
+        current={config.copyClaudeDir === true}
         skipFilter
         onSelect={(opt) => updateConfig((c) => ({ ...c, copyClaudeDir: opt.value }))}
       />

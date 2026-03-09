@@ -243,7 +243,7 @@ export function DialogNew() {
         const wtPath = generateWorktreePath(repoRoot, branchName)
 
         worktreePath = await createWorktree(repoRoot, branchName, wtPath, baseBranch)
-        const shouldCopy = config().copyClaudeDir !== false
+        const shouldCopy = config().copyClaudeDir === true
         if (shouldCopy) {
           const hasClaude = existsSync(path.join(repoRoot, ".claude"))
           if (hasClaude) {
