@@ -9,7 +9,7 @@
  * stores passwords or private key paths.
  */
 
-import { execFile, spawn, spawnSync } from "child_process"
+import { execFile, execFileSync, spawn, spawnSync } from "child_process"
 import { promisify } from "util"
 import path from "path"
 import os from "os"
@@ -205,20 +205,57 @@ export class SshTmuxExecutor implements TmuxExecutor {
   spawnAttach(sessionName: string): void {
     const socketPath = this.manager.getSocketPath(this.alias)
 
+    // Ensure tmux.conf is on the remote before attaching.
+    // uploadTmuxConf() only runs in connect(), but the ControlMaster socket
+    // may expire and reconnect without re-uploading. Upload synchronously here
+    // so Ctrl+Q always works regardless of connection history.
+    this.uploadTmuxConfSync(socketPath)
+
     // Exit TUI alternate screen buffer
     process.stdout.write("\x1b[?1049l\x1b[2J\x1b[H\x1b[?25h")
 
-    // SSH -t for interactive PTY, attach to remote tmux session (blocking)
-    spawnSync("ssh", [
+    // Build SSH args — use ControlMaster socket if alive, otherwise direct connection
+    const sshArgs = [
       "-t",
+      "-o", "ConnectTimeout=10",
       "-o", "ControlMaster=no",
       "-o", `ControlPath=${socketPath}`,
       this.alias,
       ...this.tmuxArgs("attach-session", "-t", sessionName)
-    ], { stdio: "inherit" })
+    ]
+
+    // SSH -t for interactive PTY, attach to remote tmux session (blocking)
+    const result = spawnSync("ssh", sshArgs, { stdio: "inherit" })
 
     // Re-enter TUI alternate screen buffer
     process.stdout.write("\x1b[2J\x1b[H\x1b[?1049h\x1b]0;Agent View\x07")
+
+    // Propagate SSH/tmux errors so doAttach can show them as toast
+    if (result.error) {
+      throw result.error
+    }
+    if (result.status !== null && result.status !== 0) {
+      throw new Error(`Remote attach failed (exit ${result.status}): ssh ${this.alias} tmux attach-session -t ${sessionName}`)
+    }
+  }
+
+  /**
+   * Synchronously upload local tmux.conf to remote.
+   * Used in spawnAttach to guarantee Ctrl+Q binding is available.
+   * Non-fatal: if upload fails, Ctrl+Q won't work but attach still proceeds.
+   */
+  private uploadTmuxConfSync(socketPath: string): void {
+    try {
+      const confContent = fs.readFileSync(LOCAL_TMUX_CONF, "utf-8")
+      execFileSync("ssh", [
+        "-o", "ControlMaster=no",
+        "-o", `ControlPath=${socketPath}`,
+        this.alias,
+        "sh", "-c", "mkdir -p ~/.agent-view && cat > ~/.agent-view/tmux.conf"
+      ], { input: confContent, timeout: 5000 })
+    } catch {
+      // Non-fatal: Ctrl+Q won't work but session will still function
+    }
   }
 }
 
