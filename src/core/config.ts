@@ -23,6 +23,7 @@ export interface AppConfig {
   autoHibernateMinutes?: number   // 0 = disabled, default 0
   autoHibernatePrompted?: boolean // true = user has seen the prompt
   remoteHosts?: RemoteHost[]
+  copyClaudeDir?: boolean  // true = copy .claude dir to worktree (default true)
 }
 
 const CONFIG_DIR = path.join(os.homedir(), ".agent-view")
