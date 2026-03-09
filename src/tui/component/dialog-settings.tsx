@@ -76,6 +76,11 @@ export function DialogSettings() {
         value: "remoteHosts" as const,
         footer: `${(config.remoteHosts ?? []).length} configured`,
       },
+      {
+        title: "Copy .claude to worktree",
+        value: "copyClaudeDir" as const,
+        footer: (config.copyClaudeDir !== false) ? "Yes" : "No",
+      },
     ]
 
     dialog.replace(() => (
@@ -90,6 +95,7 @@ export function DialogSettings() {
             case "defaultGroup": return showDefaultGroup()
             case "autoHibernate": return showAutoHibernate()
             case "remoteHosts": return showRemoteHosts()
+            case "copyClaudeDir": return showCopyClaudeDir()
           }
         }}
       />
@@ -171,6 +177,23 @@ export function DialogSettings() {
         current={config.autoHibernateMinutes || 0}
         skipFilter
         onSelect={(opt) => updateConfig((c) => ({ ...c, autoHibernateMinutes: opt.value, autoHibernatePrompted: true }))}
+      />
+    ))
+  }
+
+  function showCopyClaudeDir() {
+    const config = getConfig()
+    const options = [
+      { title: "Yes (copy .claude directory to new worktree)", value: true },
+      { title: "No", value: false },
+    ]
+    dialog.replace(() => (
+      <DialogSelect
+        title="Copy .claude to worktree"
+        options={options}
+        current={config.copyClaudeDir !== false}
+        skipFilter
+        onSelect={(opt) => updateConfig((c) => ({ ...c, copyClaudeDir: opt.value }))}
       />
     ))
   }
