@@ -653,6 +653,12 @@ export class SessionManager {
     }
 
     try {
+      if (session.remoteHost) {
+        const executor = this.getExecutor(session.remoteHost)
+        return await executor.exec([
+          "capture-pane", "-t", session.tmuxSession, "-p", "-S", String(-lines)
+        ])
+      }
       return await tmux.capturePane(session.tmuxSession, {
         startLine: -lines,
         escape: true,
@@ -710,8 +716,10 @@ export class SessionManager {
       throw new Error(`Session not found or not running: ${sessionId}`)
     }
 
+    log("attach() sessionId:", sessionId, "tmuxSession:", session.tmuxSession, "remoteHost:", session.remoteHost)
     const executor = this.getExecutor(session.remoteHost)
     executor.spawnAttach(session.tmuxSession)
+    log("attach() returned from spawnAttach")
   }
 
   list(): Session[] {

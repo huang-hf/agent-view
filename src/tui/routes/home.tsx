@@ -233,17 +233,16 @@ export function Home() {
       if (previewFetchAbort) return
 
       try {
-        // Remote sessions: capturePane is handled by the status poll loop via SSH executor.
-        // Avoid issuing a local tmux call which would fail or capture the wrong session.
+        let content: string
         if (session.remoteHost) {
-          setPreviewLoading(false)
-          return
+          // Remote session: fetch via SSH executor
+          content = await getSessionManager().getOutput(session.id, 200)
+        } else {
+          content = await capturePane(session.tmuxSession, {
+            startLine: -200,
+            join: true
+          })
         }
-
-        const content = await capturePane(session.tmuxSession, {
-          startLine: -200, // Last 200 lines
-          join: true
-        })
 
         if (!previewFetchAbort) {
           setPreviewContent(content)
@@ -325,6 +324,9 @@ export function Home() {
       }
     } catch (err) {
       console.error("Attach error:", err)
+      renderer.resume()
+      toast.error(err as Error)
+      return
     }
     renderer.resume()
     sync.refresh()
