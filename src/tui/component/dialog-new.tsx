@@ -53,6 +53,20 @@ async function commandExists(cmd: string, cwd?: string): Promise<boolean> {
 const projectPathHistory = new HistoryManager("dialog-new:project-paths", 15)
 const branchNameHistory = new HistoryManager("dialog-new:branch-names", 15)
 
+// Persists form state across dialog.push/pop cycles (confirmation dialog)
+interface SavedFormState {
+  title: string
+  selectedTool: Tool
+  toolIndex: number
+  claudeSessionMode: ClaudeSessionMode
+  skipPermissions: boolean
+  customCommand: string
+  projectPath: string
+  useWorktree: boolean
+  worktreeBranch: string
+}
+let _savedFormState: SavedFormState | null = null
+
 const TOOLS: { value: Tool; label: string; description: string }[] = [
   { value: "claude", label: "Claude Code", description: "Anthropic's Claude CLI" },
   { value: "opencode", label: "OpenCode", description: "OpenCode CLI" },
@@ -73,13 +87,17 @@ export function DialogNew() {
   const renderer = useRenderer()
   const { config } = useConfig()
 
-  const defaultTool = config().defaultTool || "claude"
+  // Restore state saved before confirmation push, then clear it
+  const restore = _savedFormState
+  _savedFormState = null
+
+  const defaultTool = restore?.selectedTool ?? (config().defaultTool || "claude")
   const defaultToolIndex = TOOLS.findIndex(t => t.value === defaultTool)
 
-  const [title, setTitle] = createSignal("")
+  const [title, setTitle] = createSignal(restore?.title ?? "")
   const [selectedTool, setSelectedTool] = createSignal<Tool>(defaultTool)
-  const [customCommand, setCustomCommand] = createSignal("")
-  const [projectPath, setProjectPath] = createSignal(process.cwd())
+  const [customCommand, setCustomCommand] = createSignal(restore?.customCommand ?? "")
+  const [projectPath, setProjectPath] = createSignal(restore?.projectPath ?? process.cwd())
   const [creating, setCreating] = createSignal(false)
   const [statusMessage, setStatusMessage] = createSignal("")
   const [spinnerFrame, setSpinnerFrame] = createSignal(0)
@@ -96,11 +114,11 @@ export function DialogNew() {
     }
   })
 
-  const [claudeSessionMode, setClaudeSessionMode] = createSignal<ClaudeSessionMode>("new")
-  const [skipPermissions, setSkipPermissions] = createSignal(false)
+  const [claudeSessionMode, setClaudeSessionMode] = createSignal<ClaudeSessionMode>(restore?.claudeSessionMode ?? "new")
+  const [skipPermissions, setSkipPermissions] = createSignal(restore?.skipPermissions ?? false)
 
-  const [useWorktree, setUseWorktree] = createSignal(false)
-  const [worktreeBranch, setWorktreeBranch] = createSignal("")
+  const [useWorktree, setUseWorktree] = createSignal(restore?.useWorktree ?? false)
+  const [worktreeBranch, setWorktreeBranch] = createSignal(restore?.worktreeBranch ?? "")
   const [isInGitRepo, setIsInGitRepo] = createSignal(false)
   const [useBaseDevelop, setUseBaseDevelop] = createSignal(false)
   const [developExists, setDevelopExists] = createSignal(false)
@@ -108,7 +126,7 @@ export function DialogNew() {
   const storage = getStorage()
 
   const [focusedField, setFocusedField] = createSignal<FocusField>("title")
-  const [toolIndex, setToolIndex] = createSignal(defaultToolIndex >= 0 ? defaultToolIndex : 0)
+  const [toolIndex, setToolIndex] = createSignal(restore?.toolIndex ?? (defaultToolIndex >= 0 ? defaultToolIndex : 0))
 
   let titleInputRef: InputRenderable | undefined
   let customCommandInputRef: InputRenderable | undefined
@@ -297,6 +315,19 @@ export function DialogNew() {
   }
 
   function handleCreate() {
+    // Save form state so it survives dialog.push/pop cycle
+    _savedFormState = {
+      title: title(),
+      selectedTool: selectedTool(),
+      toolIndex: toolIndex(),
+      claudeSessionMode: claudeSessionMode(),
+      skipPermissions: skipPermissions(),
+      customCommand: customCommand(),
+      projectPath: projectPath(),
+      useWorktree: useWorktree(),
+      worktreeBranch: worktreeBranch(),
+    }
+
     // Build summary lines for the confirmation dialog
     const lines: string[] = []
     lines.push(`Tool:   ${selectedTool()}`)
@@ -306,9 +337,10 @@ export function DialogNew() {
     if (useWorktree()) {
       const branch = worktreeBranch().trim()
       lines.push(`Branch: ${branch || "(auto-generated)"}`)
-
     }
 
+    // Capture doCreate in closure before DialogNew is unmounted by dialog.push
+    const capturedDoCreate = doCreate
     dialog.push(() => (
       <DialogSelect
         title={`Create session?\n\n${lines.join("\n")}`}
@@ -317,9 +349,12 @@ export function DialogNew() {
           { title: "❌ Back", value: "back" },
         ]}
         onSelect={(opt) => {
-          dialog.pop()
           if (opt.value === "confirm") {
-            doCreate()
+            _savedFormState = null
+            dialog.clear()
+            capturedDoCreate()
+          } else {
+            dialog.pop()
           }
         }}
       />
