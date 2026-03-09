@@ -65,7 +65,6 @@ export interface SavedFormState {
   projectPath: string
   useWorktree: boolean
   worktreeBranch: string
-  doCopyClaudeDir: boolean
 }
 let _savedFormState: SavedFormState | null = null
 
@@ -78,7 +77,7 @@ const TOOLS: { value: Tool; label: string; description: string }[] = [
   { value: "shell", label: "Shell", description: "Plain terminal session" }
 ]
 
-type FocusField = "title" | "host" | "tool" | "resumeSession" | "skipPermissions" | "customCommand" | "path" | "worktree" | "branch" | "copyClaudeDir"
+type FocusField = "title" | "host" | "tool" | "resumeSession" | "skipPermissions" | "customCommand" | "path" | "worktree" | "branch"
 
 export function DialogNew(props?: { prefill?: SavedFormState }) {
   const dialog = useDialog()
@@ -128,9 +127,6 @@ export function DialogNew(props?: { prefill?: SavedFormState }) {
   const [isInGitRepo, setIsInGitRepo] = createSignal(false)
   const [useBaseDevelop, setUseBaseDevelop] = createSignal(false)
   const [developExists, setDevelopExists] = createSignal(false)
-  const [claudeDirExists, setClaudeDirExists] = createSignal(false)
-  const [doCopyClaudeDir, setDoCopyClaudeDir] = createSignal(restore?.doCopyClaudeDir ?? true)
-
   const storage = getStorage()
 
   const [focusedField, setFocusedField] = createSignal<FocusField>("title")
@@ -156,7 +152,6 @@ export function DialogNew(props?: { prefill?: SavedFormState }) {
         setUseWorktree(false)
         setDevelopExists(false)
         setUseBaseDevelop(false)
-        setClaudeDirExists(false)
       } else {
         const repoRoot = await getRepoRoot(dir)
         const hasDevelop = await branchExists(repoRoot, "develop")
@@ -164,16 +159,12 @@ export function DialogNew(props?: { prefill?: SavedFormState }) {
         if (!hasDevelop) {
           setUseBaseDevelop(false)
         }
-        const hasClaude = existsSync(path.join(repoRoot, ".claude"))
-        setClaudeDirExists(hasClaude)
-        if (!hasClaude) setDoCopyClaudeDir(false)
       }
     } catch {
       setIsInGitRepo(false)
       setUseWorktree(false)
       setDevelopExists(false)
       setUseBaseDevelop(false)
-      setClaudeDirExists(false)
     }
   })
 
@@ -221,9 +212,6 @@ export function DialogNew(props?: { prefill?: SavedFormState }) {
       fields.push("worktree")
       if (useWorktree()) {
         fields.push("branch")
-        if (claudeDirExists()) {
-          fields.push("copyClaudeDir")
-        }
       }
     }
     return fields
@@ -290,8 +278,12 @@ export function DialogNew(props?: { prefill?: SavedFormState }) {
         const wtPath = generateWorktreePath(repoRoot, branchName)
 
         worktreePath = await createWorktree(repoRoot, branchName, wtPath, baseBranch)
-        if (doCopyClaudeDir() && claudeDirExists()) {
-          await copyClaudeDir(repoRoot, worktreePath)
+        const shouldCopy = config().copyClaudeDir !== false
+        if (shouldCopy) {
+          const hasClaude = existsSync(path.join(repoRoot, ".claude"))
+          if (hasClaude) {
+            await copyClaudeDir(repoRoot, worktreePath)
+          }
         }
         sessionProjectPath = worktreePath
         worktreeRepo = repoRoot
@@ -360,7 +352,6 @@ export function DialogNew(props?: { prefill?: SavedFormState }) {
       projectPath: projectPath(),
       useWorktree: useWorktree(),
       worktreeBranch: worktreeBranch(),
-      doCopyClaudeDir: doCopyClaudeDir(),
     }
 
     // Build summary lines for the confirmation dialog
@@ -372,8 +363,8 @@ export function DialogNew(props?: { prefill?: SavedFormState }) {
     if (useWorktree()) {
       const branch = worktreeBranch().trim()
       lines.push(`Branch: ${branch || "(auto-generated)"}`)
-      if (claudeDirExists() && doCopyClaudeDir()) {
-        lines.push(`.claude: will be copied`)
+      if (config().copyClaudeDir !== false) {
+        lines.push(`.claude: will be copied (if exists)`)
       }
     }
 
@@ -504,11 +495,7 @@ export function DialogNew(props?: { prefill?: SavedFormState }) {
       return
     }
 
-    if (focusedField() === "copyClaudeDir" && evt.name === "space") {
-      evt.preventDefault()
-      setDoCopyClaudeDir(!doCopyClaudeDir())
-      return
-    }
+
   })
 
   return (
@@ -764,25 +751,7 @@ export function DialogNew(props?: { prefill?: SavedFormState }) {
               </box>
             </Show>
 
-            {/* Copy .claude directory toggle */}
-            <Show when={claudeDirExists()}>
-              <box
-                flexDirection="row"
-                gap={1}
-                paddingLeft={4}
-                onMouseUp={() => {
-                  setFocusedField("copyClaudeDir")
-                  setDoCopyClaudeDir(!doCopyClaudeDir())
-                }}
-              >
-                <text fg={focusedField() === "copyClaudeDir" ? theme.primary : theme.textMuted}>
-                  {doCopyClaudeDir() ? "[x]" : "[ ]"}
-                </text>
-                <text fg={focusedField() === "copyClaudeDir" ? theme.text : theme.textMuted}>
-                  Copy .claude directory
-                </text>
-              </box>
-            </Show>
+
           </Show>
         </box>
       </Show>
