@@ -17,7 +17,7 @@ import { DialogHeader } from "@tui/ui/dialog-header"
 import { DialogFooter } from "@tui/ui/dialog-footer"
 import { ActionButton } from "@tui/ui/action-button"
 import { attachSessionSync } from "@/core/tmux"
-import { isGitRepo, getRepoRoot, createWorktree, generateBranchName, generateWorktreePath, sanitizeBranchName, branchExists } from "@/core/git"
+import { isGitRepo, getRepoRoot, createWorktree, generateBranchName, generateWorktreePath, sanitizeBranchName, branchExists, copyClaudeDir } from "@/core/git"
 import { HistoryManager } from "@/core/history"
 import { getStorage } from "@/core/storage"
 import type { Tool, ClaudeSessionMode } from "@/core/types"
@@ -53,6 +53,21 @@ async function commandExists(cmd: string, cwd?: string): Promise<boolean> {
 const projectPathHistory = new HistoryManager("dialog-new:project-paths", 30)
 const branchNameHistory = new HistoryManager("dialog-new:branch-names", 30)
 
+// Persists form state across dialog.push/pop cycles (confirmation dialog)
+interface SavedFormState {
+  title: string
+  selectedTool: Tool
+  toolIndex: number
+  claudeSessionMode: ClaudeSessionMode
+  skipPermissions: boolean
+  customCommand: string
+  projectPath: string
+  useWorktree: boolean
+  worktreeBranch: string
+  doCopyClaudeDir: boolean
+}
+let _savedFormState: SavedFormState | null = null
+
 const TOOLS: { value: Tool; label: string; description: string }[] = [
   { value: "claude", label: "Claude Code", description: "Anthropic's Claude CLI" },
   { value: "opencode", label: "OpenCode", description: "OpenCode CLI" },
@@ -62,7 +77,7 @@ const TOOLS: { value: Tool; label: string; description: string }[] = [
   { value: "shell", label: "Shell", description: "Plain terminal session" }
 ]
 
-type FocusField = "title" | "tool" | "resumeSession" | "skipPermissions" | "customCommand" | "path" | "worktree" | "branch"
+type FocusField = "title" | "tool" | "resumeSession" | "skipPermissions" | "customCommand" | "path" | "worktree" | "branch" | "copyClaudeDir"
 
 export function DialogNew() {
   const dialog = useDialog()
@@ -73,13 +88,17 @@ export function DialogNew() {
   const renderer = useRenderer()
   const { config } = useConfig()
 
-  const defaultTool = config().defaultTool || "claude"
+  // Restore state saved before confirmation push, then clear it
+  const restore = _savedFormState
+  _savedFormState = null
+
+  const defaultTool = restore?.selectedTool ?? (config().defaultTool || "claude")
   const defaultToolIndex = TOOLS.findIndex(t => t.value === defaultTool)
 
-  const [title, setTitle] = createSignal("")
+  const [title, setTitle] = createSignal(restore?.title ?? "")
   const [selectedTool, setSelectedTool] = createSignal<Tool>(defaultTool)
-  const [customCommand, setCustomCommand] = createSignal("")
-  const [projectPath, setProjectPath] = createSignal(process.cwd())
+  const [customCommand, setCustomCommand] = createSignal(restore?.customCommand ?? "")
+  const [projectPath, setProjectPath] = createSignal(restore?.projectPath ?? process.cwd())
   const [creating, setCreating] = createSignal(false)
   const [statusMessage, setStatusMessage] = createSignal("")
   const [spinnerFrame, setSpinnerFrame] = createSignal(0)
@@ -96,19 +115,21 @@ export function DialogNew() {
     }
   })
 
-  const [claudeSessionMode, setClaudeSessionMode] = createSignal<ClaudeSessionMode>("new")
-  const [skipPermissions, setSkipPermissions] = createSignal(false)
+  const [claudeSessionMode, setClaudeSessionMode] = createSignal<ClaudeSessionMode>(restore?.claudeSessionMode ?? "new")
+  const [skipPermissions, setSkipPermissions] = createSignal(restore?.skipPermissions ?? false)
 
-  const [useWorktree, setUseWorktree] = createSignal(false)
-  const [worktreeBranch, setWorktreeBranch] = createSignal("")
+  const [useWorktree, setUseWorktree] = createSignal(restore?.useWorktree ?? false)
+  const [worktreeBranch, setWorktreeBranch] = createSignal(restore?.worktreeBranch ?? "")
   const [isInGitRepo, setIsInGitRepo] = createSignal(false)
   const [useBaseDevelop, setUseBaseDevelop] = createSignal(false)
   const [developExists, setDevelopExists] = createSignal(false)
+  const [claudeDirExists, setClaudeDirExists] = createSignal(false)
+  const [doCopyClaudeDir, setDoCopyClaudeDir] = createSignal(restore?.doCopyClaudeDir ?? true)
 
   const storage = getStorage()
 
   const [focusedField, setFocusedField] = createSignal<FocusField>("title")
-  const [toolIndex, setToolIndex] = createSignal(defaultToolIndex >= 0 ? defaultToolIndex : 0)
+  const [toolIndex, setToolIndex] = createSignal(restore?.toolIndex ?? (defaultToolIndex >= 0 ? defaultToolIndex : 0))
 
   let titleInputRef: InputRenderable | undefined
   let customCommandInputRef: InputRenderable | undefined
@@ -122,27 +143,32 @@ export function DialogNew() {
   })
 
   createEffect(async () => {
-    const path = projectPath()
+    const dir = projectPath()
     try {
-      const result = await isGitRepo(path)
+      const result = await isGitRepo(dir)
       setIsInGitRepo(result)
       if (!result) {
         setUseWorktree(false)
         setDevelopExists(false)
         setUseBaseDevelop(false)
+        setClaudeDirExists(false)
       } else {
-        const repoRoot = await getRepoRoot(path)
+        const repoRoot = await getRepoRoot(dir)
         const hasDevelop = await branchExists(repoRoot, "develop")
         setDevelopExists(hasDevelop)
         if (!hasDevelop) {
           setUseBaseDevelop(false)
         }
+        const hasClaude = existsSync(path.join(repoRoot, ".claude"))
+        setClaudeDirExists(hasClaude)
+        if (!hasClaude) setDoCopyClaudeDir(false)
       }
     } catch {
       setIsInGitRepo(false)
       setUseWorktree(false)
       setDevelopExists(false)
       setUseBaseDevelop(false)
+      setClaudeDirExists(false)
     }
   })
 
@@ -188,6 +214,9 @@ export function DialogNew() {
       fields.push("worktree")
       if (useWorktree()) {
         fields.push("branch")
+        if (claudeDirExists()) {
+          fields.push("copyClaudeDir")
+        }
       }
     }
     return fields
@@ -245,6 +274,9 @@ export function DialogNew() {
         const wtPath = generateWorktreePath(repoRoot, branchName)
 
         worktreePath = await createWorktree(repoRoot, branchName, wtPath, baseBranch)
+        if (doCopyClaudeDir() && claudeDirExists()) {
+          await copyClaudeDir(repoRoot, worktreePath)
+        }
         sessionProjectPath = worktreePath
         worktreeRepo = repoRoot
         worktreeBranchName = branchName
@@ -297,6 +329,20 @@ export function DialogNew() {
   }
 
   function handleCreate() {
+    // Save form state so it survives dialog.push/pop cycle
+    _savedFormState = {
+      title: title(),
+      selectedTool: selectedTool(),
+      toolIndex: toolIndex(),
+      claudeSessionMode: claudeSessionMode(),
+      skipPermissions: skipPermissions(),
+      customCommand: customCommand(),
+      projectPath: projectPath(),
+      useWorktree: useWorktree(),
+      worktreeBranch: worktreeBranch(),
+      doCopyClaudeDir: doCopyClaudeDir(),
+    }
+
     // Build summary lines for the confirmation dialog
     const lines: string[] = []
     lines.push(`Tool:   ${selectedTool()}`)
@@ -306,9 +352,13 @@ export function DialogNew() {
     if (useWorktree()) {
       const branch = worktreeBranch().trim()
       lines.push(`Branch: ${branch || "(auto-generated)"}`)
-
+      if (claudeDirExists() && doCopyClaudeDir()) {
+        lines.push(`.claude: will be copied`)
+      }
     }
 
+    // Capture doCreate in closure before DialogNew is unmounted by dialog.push
+    const capturedDoCreate = doCreate
     dialog.push(() => (
       <DialogSelect
         title={`Create session?\n\n${lines.join("\n")}`}
@@ -317,9 +367,12 @@ export function DialogNew() {
           { title: "❌ Back", value: "back" },
         ]}
         onSelect={(opt) => {
-          dialog.pop()
           if (opt.value === "confirm") {
-            doCreate()
+            _savedFormState = null
+            dialog.clear()
+            capturedDoCreate()
+          } else {
+            dialog.pop()
           }
         }}
       />
@@ -409,6 +462,12 @@ export function DialogNew() {
     if (focusedField() === "skipPermissions" && evt.name === "space") {
       evt.preventDefault()
       setSkipPermissions(!skipPermissions())
+      return
+    }
+
+    if (focusedField() === "copyClaudeDir" && evt.name === "space") {
+      evt.preventDefault()
+      setDoCopyClaudeDir(!doCopyClaudeDir())
       return
     }
   })
@@ -615,6 +674,26 @@ export function DialogNew() {
                 <text fg={theme.textMuted}>Base on develop</text>
               </box>
             </Show>
+
+            {/* Copy .claude directory toggle */}
+            <Show when={claudeDirExists()}>
+              <box
+                flexDirection="row"
+                gap={1}
+                paddingLeft={4}
+                onMouseUp={() => {
+                  setFocusedField("copyClaudeDir")
+                  setDoCopyClaudeDir(!doCopyClaudeDir())
+                }}
+              >
+                <text fg={focusedField() === "copyClaudeDir" ? theme.primary : theme.textMuted}>
+                  {doCopyClaudeDir() ? "[x]" : "[ ]"}
+                </text>
+                <text fg={focusedField() === "copyClaudeDir" ? theme.text : theme.textMuted}>
+                  Copy .claude directory
+                </text>
+              </box>
+            </Show>
           </Show>
         </box>
       </Show>
@@ -641,7 +720,7 @@ export function DialogNew() {
         onAction={handleCreate}
       />
 
-      <DialogFooter hint={creating() ? statusMessage() : "Tab | Enter: create"} />
+      <DialogFooter hint={creating() ? statusMessage() : (focusedField() === "path" || focusedField() === "branch") ? "↓↑ browse | Tab/→ select | Enter create" : "Tab | Enter: create"} />
     </box>
   )
 }
