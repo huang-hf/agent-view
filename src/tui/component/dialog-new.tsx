@@ -20,8 +20,9 @@ import { attachSessionSync } from "@/core/tmux"
 import { isGitRepo, getRepoRoot, createWorktree, generateBranchName, generateWorktreePath, sanitizeBranchName, branchExists, copyClaudeDir } from "@/core/git"
 import { HistoryManager } from "@/core/history"
 import { getStorage } from "@/core/storage"
-import type { Tool, ClaudeSessionMode } from "@/core/types"
+import type { Tool, ClaudeSessionMode, RemoteHost } from "@/core/types"
 import { getToolCommand } from "@/core/types"
+import { getConfig } from "@/core/config"
 import { exec } from "child_process"
 import { promisify } from "util"
 import { existsSync } from "fs"
@@ -77,7 +78,7 @@ const TOOLS: { value: Tool; label: string; description: string }[] = [
   { value: "shell", label: "Shell", description: "Plain terminal session" }
 ]
 
-type FocusField = "title" | "tool" | "resumeSession" | "skipPermissions" | "customCommand" | "path" | "worktree" | "branch" | "copyClaudeDir"
+type FocusField = "title" | "host" | "tool" | "resumeSession" | "skipPermissions" | "customCommand" | "path" | "worktree" | "branch" | "copyClaudeDir"
 
 export function DialogNew() {
   const dialog = useDialog()
@@ -94,6 +95,10 @@ export function DialogNew() {
 
   const defaultTool = restore?.selectedTool ?? (config().defaultTool || "claude")
   const defaultToolIndex = TOOLS.findIndex(t => t.value === defaultTool)
+
+  const remoteHosts = () => getConfig().remoteHosts ?? []
+  const [selectedRemoteHost, setSelectedRemoteHost] = createSignal<string>("")  // "" = local
+  const [hostIndex, setHostIndex] = createSignal(0)  // 0 = Local
 
   const [title, setTitle] = createSignal(restore?.title ?? "")
   const [selectedTool, setSelectedTool] = createSignal<Tool>(defaultTool)
@@ -201,7 +206,9 @@ export function DialogNew() {
   })
 
   function getFocusableFields(): FocusField[] {
-    const fields: FocusField[] = ["title", "tool"]
+    const fields: FocusField[] = ["title"]
+    if (remoteHosts().length > 0) fields.push("host")
+    fields.push("tool")
     if (selectedTool() === "claude") {
       fields.push("resumeSession")
       fields.push("skipPermissions")
@@ -210,7 +217,7 @@ export function DialogNew() {
       fields.push("customCommand")
     }
     fields.push("path")
-    if (isInGitRepo()) {
+    if (isInGitRepo() && !selectedRemoteHost()) {
       fields.push("worktree")
       if (useWorktree()) {
         fields.push("branch")
@@ -234,20 +241,29 @@ export function DialogNew() {
       }
 
       let sessionProjectPath = projectPath().trim() || process.cwd()
-      // Expand ~ to home directory (shell doesn't do this for us)
-      if (sessionProjectPath.startsWith("~")) {
-        sessionProjectPath = sessionProjectPath.replace("~", process.env.HOME || "")
-      }
-      if (!existsSync(sessionProjectPath)) {
-        throw new Error(`Directory '${sessionProjectPath}' does not exist`)
+
+      if (selectedRemoteHost()) {
+        // Remote session: skip local path validation entirely.
+        // The path lives on the remote server; let tmux handle ~ expansion.
+      } else {
+        // Local session: expand ~ and verify the directory exists
+        if (sessionProjectPath.startsWith("~")) {
+          sessionProjectPath = sessionProjectPath.replace("~", process.env.HOME || "")
+        }
+        if (!existsSync(sessionProjectPath)) {
+          throw new Error(`Directory '${sessionProjectPath}' does not exist`)
+        }
       }
 
-      const toolCmd = getToolCommand(selectedTool(), customCommand())
-      const cmdToCheck = toolCmd.split(" ")[0] || toolCmd
-      setStatusMessage(`Checking ${cmdToCheck}...`)
-      const exists = await commandExists(cmdToCheck, sessionProjectPath)
-      if (!exists) {
-        throw new Error(`Command '${cmdToCheck}' not found.`)
+      // Only check command existence for local sessions
+      if (!selectedRemoteHost()) {
+        const toolCmd = getToolCommand(selectedTool(), customCommand())
+        const cmdToCheck = toolCmd.split(" ")[0] || toolCmd
+        setStatusMessage(`Checking ${cmdToCheck}...`)
+        const exists = await commandExists(cmdToCheck, sessionProjectPath)
+        if (!exists) {
+          throw new Error(`Command '${cmdToCheck}' not found.`)
+        }
       }
 
       let worktreePath: string | undefined
@@ -297,7 +313,8 @@ export function DialogNew() {
         worktreePath,
         worktreeRepo,
         worktreeBranch: worktreeBranchName,
-        claudeOptions
+        claudeOptions,
+        remoteHost: selectedRemoteHost() || undefined
       })
 
       projectPathHistory.addEntry(storage, projectPath())
@@ -305,12 +322,15 @@ export function DialogNew() {
         branchNameHistory.addEntry(storage, worktreeBranchName)
       }
 
-      const message = useWorktree()
-        ? `Created ${session.title} in worktree`
-        : `Created ${session.title}`
+      const message = selectedRemoteHost()
+        ? `Created ${session.title} on ${selectedRemoteHost()}`
+        : useWorktree()
+          ? `Created ${session.title} in worktree`
+          : `Created ${session.title}`
       toast.show({ message, variant: "success", duration: 2000 })
 
-      if (session.tmuxSession) {
+      // Only auto-attach for local sessions
+      if (session.tmuxSession && !selectedRemoteHost()) {
         renderer.suspend()
         attachSessionSync(session.tmuxSession)
         renderer.resume()
@@ -422,6 +442,25 @@ export function DialogNew() {
       return
     }
 
+    if (focusedField() === "host") {
+      const hosts = remoteHosts()
+      const total = hosts.length + 1  // +1 for "Local"
+      if (evt.name === "up" || evt.name === "k") {
+        evt.preventDefault()
+        const newIdx = (hostIndex() - 1 + total) % total
+        setHostIndex(newIdx)
+        setSelectedRemoteHost(newIdx === 0 ? "" : (hosts[newIdx - 1]?.alias ?? ""))
+        return
+      }
+      if (evt.name === "down" || evt.name === "j") {
+        evt.preventDefault()
+        const newIdx = (hostIndex() + 1) % total
+        setHostIndex(newIdx)
+        setSelectedRemoteHost(newIdx === 0 ? "" : (hosts[newIdx - 1]?.alias ?? ""))
+        return
+      }
+    }
+
     if (focusedField() === "tool") {
       if (evt.name === "up" || evt.name === "k") {
         evt.preventDefault()
@@ -500,6 +539,56 @@ export function DialogNew() {
           />
         </box>
       </box>
+
+      {/* Host selector — only show if remoteHosts configured */}
+      <Show when={remoteHosts().length > 0}>
+        <box paddingLeft={4} paddingRight={4} paddingTop={1} gap={1}>
+          <text fg={focusedField() === "host" ? theme.primary : theme.textMuted}>
+            Host
+          </text>
+          <box gap={0} flexDirection="column">
+            <box
+              flexDirection="row"
+              gap={1}
+              height={1}
+              onMouseUp={() => {
+                setSelectedRemoteHost("")
+                setHostIndex(0)
+                setFocusedField("host")
+              }}
+              paddingLeft={1}
+              backgroundColor={selectedRemoteHost() === "" ? theme.backgroundElement : undefined}
+            >
+              <text fg={selectedRemoteHost() === "" ? theme.primary : theme.textMuted}>
+                {selectedRemoteHost() === "" ? "●" : "○"}
+              </text>
+              <text fg={theme.text}>Local</text>
+            </box>
+            <For each={remoteHosts()}>
+              {(host, idx) => (
+                <box
+                  flexDirection="row"
+                  gap={1}
+                  height={1}
+                  onMouseUp={() => {
+                    setSelectedRemoteHost(host.alias)
+                    setHostIndex(idx() + 1)
+                    setFocusedField("host")
+                  }}
+                  paddingLeft={1}
+                  backgroundColor={selectedRemoteHost() === host.alias ? theme.backgroundElement : undefined}
+                >
+                  <text fg={selectedRemoteHost() === host.alias ? theme.primary : theme.textMuted}>
+                    {selectedRemoteHost() === host.alias ? "●" : "○"}
+                  </text>
+                  <text fg={theme.text}>{host.label || host.alias}</text>
+                  <text fg={theme.textMuted}>- {host.alias}</text>
+                </box>
+              )}
+            </For>
+          </box>
+        </box>
+      </Show>
 
       {/* Tool selection */}
       <box paddingLeft={4} paddingRight={4} paddingTop={1} gap={1}>
@@ -616,8 +705,8 @@ export function DialogNew() {
         />
       </box>
 
-      {/* Worktree option (only shown in git repos) */}
-      <Show when={isInGitRepo()}>
+      {/* Worktree option (only shown in git repos for local sessions) */}
+      <Show when={isInGitRepo() && !selectedRemoteHost()}>
         <box paddingLeft={4} paddingRight={4} paddingTop={1} gap={1}>
           <box
             flexDirection="row"

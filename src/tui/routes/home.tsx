@@ -21,6 +21,8 @@ import { DialogRecents } from "@tui/component/dialog-recents"
 import { DialogSettings } from "@tui/component/dialog-settings"
 import { DialogHelp } from "@tui/component/dialog-help"
 import { getShortcuts } from "@/core/config"
+import { getSessionManager } from "@/core/session"
+import { getSshManager } from "@/core/ssh"
 import { executeShortcut, getShortcutGroupPath } from "@/core/shortcut"
 import { useKeybind } from "@tui/context/keybind"
 import { useKV } from "@tui/context/kv"
@@ -28,7 +30,7 @@ import { DialogUpdate } from "@tui/component/dialog-update"
 import { attachSessionSync, capturePane, wasCommandPaletteRequested, sendKeys } from "@/core/tmux"
 import { useCommandDialog } from "@tui/component/dialog-command"
 import type { Session, Group } from "@/core/types"
-import { formatRelativeTime, formatSmartTime, truncatePath } from "@tui/util/locale"
+import { formatRelativeTime, truncatePath } from "@tui/util/locale"
 import { STATUS_ICONS } from "@tui/util/status"
 import { sortSessionsByCreatedAt } from "@tui/util/session"
 import { createListNavigation } from "@tui/util/navigation"
@@ -73,7 +75,9 @@ function stripAnsi(str: string): string {
 
 // Minimum width for dual-column layout
 const DUAL_COLUMN_MIN_WIDTH = 100
-const LEFT_PANEL_RATIO = 0.35
+const LEFT_PANEL_MIN_WIDTH = 30
+const LEFT_PANEL_MAX_RATIO = 0.5 // Never take more than 50% of screen
+const RIGHT_PANEL_MIN_WIDTH = 40 // Always leave room for preview
 
 export function Home() {
   const dimensions = useTerminalDimensions()
@@ -112,9 +116,32 @@ export function Home() {
 
   const useDualColumn = createMemo(() => dimensions().width >= DUAL_COLUMN_MIN_WIDTH)
 
+  // Calculate longest session/group title for dynamic panel sizing
+  const longestTitleLen = createMemo(() => {
+    const sessions = sync.session.list()
+    const groups = sync.group.list()
+    let maxLen = 0
+    for (const s of sessions) {
+      if (s.title.length > maxLen) maxLen = s.title.length
+    }
+    for (const g of groups) {
+      if (g.name.length > maxLen) maxLen = g.name.length
+    }
+    return maxLen
+  })
+
   const leftWidth = createMemo(() => {
     if (!useDualColumn()) return dimensions().width
-    return Math.floor(dimensions().width * LEFT_PANEL_RATIO)
+
+    // Fixed elements: padding(2) + indent(2) + status(2) + memory(6) = 12
+    const fixedWidth = 12
+    const neededWidth = longestTitleLen() + fixedWidth
+
+    const maxAllowed = Math.floor(dimensions().width * LEFT_PANEL_MAX_RATIO)
+    const minForPreview = dimensions().width - RIGHT_PANEL_MIN_WIDTH - 1
+
+    // Clamp: at least LEFT_PANEL_MIN_WIDTH, at most maxAllowed or what leaves room for preview
+    return Math.max(LEFT_PANEL_MIN_WIDTH, Math.min(neededWidth, maxAllowed, minForPreview))
   })
 
   const rightWidth = createMemo(() => {
@@ -194,6 +221,13 @@ export function Home() {
       if (previewFetchAbort) return
 
       try {
+        // Remote sessions: capturePane is handled by the status poll loop via SSH executor.
+        // Avoid issuing a local tmux call which would fail or capture the wrong session.
+        if (session.remoteHost) {
+          setPreviewLoading(false)
+          return
+        }
+
         const content = await capturePane(session.tmuxSession, {
           startLine: -200, // Last 200 lines
           join: true
@@ -268,15 +302,20 @@ export function Home() {
     previewFetchAbort = true
     renderer.suspend()
     try {
-      attachSessionSync(session.tmuxSession)
+      if (session.remoteHost) {
+        // Remote: route through session manager executor (blocks via spawnSync)
+        getSessionManager().attach(session.id)
+      } else {
+        attachSessionSync(session.tmuxSession)
+      }
     } catch (err) {
       console.error("Attach error:", err)
     }
     renderer.resume()
     sync.refresh()
 
-    // Check if user pressed Ctrl+K to open command palette
-    if (wasCommandPaletteRequested()) {
+    // Check if user pressed Ctrl+K to open command palette (local only)
+    if (!session.remoteHost && wasCommandPaletteRequested()) {
       command.open()
     }
   }
@@ -659,11 +698,7 @@ export function Home() {
 
   function GroupHeader(props: { group: Group; index: number }) {
     const isSelected = createMemo(() => props.index === selectedIndex())
-    const sessionCount = createMemo(() => getGroupSessionCount(allSessions(), props.group.path))
     const statusSummary = createMemo(() => getGroupStatusSummary(allSessions(), props.group.path))
-
-    const item = createMemo(() => groupedItems()[props.index])
-    const groupIndex = createMemo(() => item()?.groupIndex)
 
     return (
       <box
@@ -706,20 +741,6 @@ export function Home() {
           <text fg={isSelected() ? theme.selectedListItemText : theme.warning}>
             {STATUS_ICONS.waiting}{statusSummary().waiting}
           </text>
-          <text> </text>
-        </Show>
-
-        {/* Session count */}
-        <text fg={isSelected() ? theme.selectedListItemText : theme.textMuted}>
-          ({sessionCount()})
-        </text>
-
-        {/* Hotkey hint */}
-        <Show when={groupIndex()}>
-          <text> </text>
-          <text fg={isSelected() ? theme.selectedListItemText : theme.textMuted}>
-            [{groupIndex()}]
-          </text>
         </Show>
       </box>
     )
@@ -733,16 +754,33 @@ export function Home() {
         case "waiting": return theme.warning
         case "error": return theme.error
         case "hibernated": return theme.secondary
+        case "offline": return theme.textMuted
         default: return theme.textMuted
       }
     })
 
-    const maxTitleLen = useDualColumn() ? 15 : 20
-    const title = props.session.title.length > maxTitleLen
-      ? props.session.title.slice(0, maxTitleLen - 2) + ".."
-      : props.session.title
-
     const indent = props.indented ? 2 : 0
+
+    // Calculate available space for title dynamically
+    // Layout: [padding] [indent] [status icon + space] [title] [spacer] [memory?] [padding]
+    const reservedWidth = createMemo(() => {
+      let reserved = 2 // left + right padding
+      reserved += indent // indentation
+      reserved += 2 // status icon + space
+      reserved += 6 // memory indicator (e.g., "512M ")
+      if (!useDualColumn()) {
+        reserved += 8 // tool name + space in single column mode
+      }
+      return reserved
+    })
+
+    const maxTitleLen = createMemo(() => Math.max(10, leftWidth() - reservedWidth()))
+    const title = createMemo(() => {
+      const max = maxTitleLen()
+      return props.session.title.length > max
+        ? props.session.title.slice(0, max - 2) + ".."
+        : props.session.title
+    })
 
     return (
       <box
@@ -757,18 +795,26 @@ export function Home() {
         }}
         onMouseOver={() => setSelectedIndex(props.index)}
       >
-        {/* Status icon */}
-        <text fg={isSelected() ? theme.selectedListItemText : statusColor()}>
-          {STATUS_ICONS[props.session.status]}
-        </text>
-        <text> </text>
+        {/* Status icon with fixed width */}
+        <box width={2} flexShrink={0}>
+          <text fg={isSelected() ? theme.selectedListItemText : statusColor()}>
+            {STATUS_ICONS[props.session.status]}
+          </text>
+        </box>
+
+        {/* Remote host tag */}
+        <Show when={props.session.remoteHost}>
+          <text fg={isSelected() ? theme.selectedListItemText : theme.textMuted}>
+            [{props.session.remoteHost}]{" "}
+          </text>
+        </Show>
 
         {/* Title */}
         <text
           fg={isSelected() ? theme.selectedListItemText : theme.text}
           attributes={isSelected() ? TextAttributes.BOLD : undefined}
         >
-          {title}
+          {title()}
         </text>
 
         {/* Spacer */}
@@ -786,23 +832,19 @@ export function Home() {
         <Show when={props.session.status === "hibernated"} fallback={
           <Show when={sync.session.getMemoryMB(props.session.id)}>
             {(mb: () => number) => (
-              <>
+              <box flexShrink={0}>
                 <text fg={isSelected() ? theme.selectedListItemText : theme.textMuted}>
-                  {mb() >= 1024 ? `${(mb() / 1024).toFixed(1)}G` : `${mb()}M`}
+                  {" " + (mb() >= 1024 ? `${(mb() / 1024).toFixed(1)}G` : `${mb()}M`)}
                 </text>
-                <text> </text>
-              </>
+              </box>
             )}
           </Show>
         }>
-          <text>{"\uD83D\uDE34"}</text>
-          <text> </text>
+          <box flexShrink={0}>
+            <text>{" \uD83D\uDE34"}</text>
+          </box>
         </Show>
 
-        {/* Time */}
-        <text fg={isSelected() ? theme.selectedListItemText : theme.textMuted}>
-          {formatSmartTime(props.session.lastAccessed)}
-        </text>
       </box>
     )
   }
@@ -845,12 +887,24 @@ export function Home() {
               <text fg={theme.textMuted}>{truncatePath(s().projectPath, rightWidth() - 20)}</text>
             </box>
 
-            {/* More info */}
+            {/* Time and tool info */}
             <box flexDirection="row" gap={2} height={1}>
               <text fg={theme.accent}>{s().tool}</text>
               <text fg={theme.textMuted}>{formatRelativeTime(s().lastAccessed)}</text>
               <Show when={s().worktreeBranch}>
                 <text fg={theme.info}>{s().worktreeBranch}</text>
+              </Show>
+              <Show when={s().remoteHost}>
+                {() => {
+                  const sshStatus = getSshManager().getStatus(s().remoteHost)
+                  const indicator = sshStatus === "connected" ? "●"
+                    : sshStatus === "connecting" ? "…"
+                    : "○"
+                  const color = sshStatus === "connected" ? theme.success
+                    : sshStatus === "connecting" ? theme.warning
+                    : theme.textMuted
+                  return <text fg={color}>{indicator} {s().remoteHost}</text>
+                }}
               </Show>
             </box>
 
@@ -1081,10 +1135,6 @@ export function Home() {
         <box flexDirection="column" alignItems="center">
           <text fg={theme.text}>c</text>
           <text fg={theme.textMuted}>settings</text>
-        </box>
-        <box flexDirection="column" alignItems="center">
-          <text fg={theme.text}>1-9</text>
-          <text fg={theme.textMuted}>jump</text>
         </box>
         <box flexDirection="column" alignItems="center">
           <text fg={theme.text}>q</text>

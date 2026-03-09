@@ -10,7 +10,7 @@ import os from "os"
 import fs from "fs"
 import type { Session, Group, StatusUpdate, Tool, SessionStatus } from "./types"
 
-const SCHEMA_VERSION = 1
+const SCHEMA_VERSION = 2
 
 export interface StorageOptions {
   dbPath?: string
@@ -94,6 +94,13 @@ export class Storage {
       )
     `)
 
+    // Migration: add remote_host column (schema v2)
+    try {
+      this.db.exec("ALTER TABLE sessions ADD COLUMN remote_host TEXT NOT NULL DEFAULT ''")
+    } catch {
+      // Column already exists — safe to ignore
+    }
+
     // Set schema version
     const setVersion = this.db.prepare(
       "INSERT OR REPLACE INTO metadata (key, value) VALUES ('schema_version', ?)"
@@ -125,8 +132,8 @@ export class Storage {
         command, wrapper, tool, status, tmux_session,
         created_at, last_accessed,
         parent_session_id, worktree_path, worktree_repo, worktree_branch,
-        tool_data, acknowledged
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        tool_data, acknowledged, remote_host
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
 
     stmt.run(
@@ -147,7 +154,8 @@ export class Storage {
       session.worktreeRepo,
       session.worktreeBranch,
       JSON.stringify(session.toolData),
-      session.acknowledged ? 1 : 0
+      session.acknowledged ? 1 : 0,
+      session.remoteHost || ""
     )
   }
 
@@ -160,8 +168,8 @@ export class Storage {
         command, wrapper, tool, status, tmux_session,
         created_at, last_accessed,
         parent_session_id, worktree_path, worktree_repo, worktree_branch,
-        tool_data, acknowledged
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        tool_data, acknowledged, remote_host
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
 
     const transaction = this.db.transaction(() => {
@@ -190,7 +198,8 @@ export class Storage {
           session.worktreeRepo,
           session.worktreeBranch,
           JSON.stringify(session.toolData),
-          session.acknowledged ? 1 : 0
+          session.acknowledged ? 1 : 0,
+          session.remoteHost || ""
         )
       }
     })
@@ -205,7 +214,7 @@ export class Storage {
         command, wrapper, tool, status, tmux_session,
         created_at, last_accessed,
         parent_session_id, worktree_path, worktree_repo, worktree_branch,
-        tool_data, acknowledged
+        tool_data, acknowledged, remote_host
       FROM sessions ORDER BY sort_order
     `)
 
@@ -228,7 +237,8 @@ export class Storage {
       worktreeRepo: row.worktree_repo,
       worktreeBranch: row.worktree_branch,
       toolData: JSON.parse(row.tool_data),
-      acknowledged: row.acknowledged === 1
+      acknowledged: row.acknowledged === 1,
+      remoteHost: row.remote_host || ""
     }))
   }
 
@@ -238,7 +248,7 @@ export class Storage {
         command, wrapper, tool, status, tmux_session,
         created_at, last_accessed,
         parent_session_id, worktree_path, worktree_repo, worktree_branch,
-        tool_data, acknowledged
+        tool_data, acknowledged, remote_host
       FROM sessions WHERE id = ?
     `)
 
@@ -263,7 +273,8 @@ export class Storage {
       worktreeRepo: row.worktree_repo,
       worktreeBranch: row.worktree_branch,
       toolData: JSON.parse(row.tool_data),
-      acknowledged: row.acknowledged === 1
+      acknowledged: row.acknowledged === 1,
+      remoteHost: row.remote_host || ""
     }
   }
 
