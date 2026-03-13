@@ -13,6 +13,7 @@ import { useDialog } from "@tui/ui/dialog"
 import { useToast } from "@tui/ui/toast"
 import { DialogSelect, type DialogSelectOption } from "@tui/ui/dialog-select"
 import { attachSessionSync } from "@/core/tmux"
+import { getSessionManager } from "@/core/session"
 import type { Session, SessionStatus } from "@/core/types"
 import { formatSmartTime, truncatePath } from "@tui/util/locale"
 import { STATUS_ICONS } from "@tui/util/status"
@@ -134,9 +135,12 @@ export function DialogSessions() {
     renderer.suspend()
 
     // Use sync attach - this blocks the event loop completely
-    // User detaches with standard tmux: Ctrl+B, D
     try {
-      attachSessionSync(session.tmuxSession)
+      if (session.remoteHost) {
+        getSessionManager().attach(session.id)
+      } else {
+        attachSessionSync(session.tmuxSession)
+      }
     } catch (err) {
       console.error("Attach error:", err)
     }

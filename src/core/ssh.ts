@@ -78,7 +78,7 @@ export class SshControlManager {
       await execFileAsync("ssh", [
         "-o", "ControlMaster=yes",
         "-o", `ControlPath=${socketPath}`,
-        "-o", "ControlPersist=120",
+        "-o", "ControlPersist=3600",
         "-o", "ConnectTimeout=10",
         "-o", "BatchMode=yes",   // Fail fast if auth requires interactive input
         "-fN",                   // Background, no command
@@ -107,7 +107,7 @@ export class SshControlManager {
           "-o", "ControlMaster=no",
           "-o", `ControlPath=${socketPath}`,
           alias,
-          "sh", "-c", "mkdir -p ~/.agent-view && cat > ~/.agent-view/tmux.conf"
+          "mkdir -p ~/.agent-view && cat > ~/.agent-view/tmux.conf"
         ])
         child.stdin.write(confContent)
         child.stdin.end()
@@ -170,11 +170,19 @@ export class SshControlManager {
    */
   async execRemote(alias: string, args: string[]): Promise<string> {
     const socketPath = this.getSocketPath(alias)
+    // SSH concatenates args with spaces and passes them to the remote shell.
+    // Single-quote each arg to prevent the shell from misinterpreting special
+    // characters — most critically '#' which starts a comment and causes tmux
+    // format strings like #{session_name} to be silently discarded.
+    // Exception: args starting with '~' are left unquoted so tilde expands.
+    const remoteCmd = args
+      .map(a => /^~/.test(a) ? a : "'" + a.replace(/'/g, "'\\''") + "'")
+      .join(" ")
     const { stdout } = await execFileAsync("ssh", [
       "-o", "ControlMaster=no",
       "-o", `ControlPath=${socketPath}`,
       alias,
-      ...args
+      remoteCmd
     ])
     return stdout
   }
@@ -247,12 +255,21 @@ export class SshTmuxExecutor implements TmuxExecutor {
   private uploadTmuxConfSync(socketPath: string): void {
     try {
       const confContent = fs.readFileSync(LOCAL_TMUX_CONF, "utf-8")
+      // Upload conf file
       execFileSync("ssh", [
         "-o", "ControlMaster=no",
         "-o", `ControlPath=${socketPath}`,
         this.alias,
-        "sh", "-c", "mkdir -p ~/.agent-view && cat > ~/.agent-view/tmux.conf"
+        "mkdir -p ~/.agent-view && cat > ~/.agent-view/tmux.conf"
       ], { input: confContent, timeout: 5000 })
+      // Reload conf on the running tmux server so Ctrl+Q binding takes effect immediately.
+      // source-file is safe to run even if no sessions exist (server may not be running yet).
+      execFileSync("ssh", [
+        "-o", "ControlMaster=no",
+        "-o", `ControlPath=${socketPath}`,
+        this.alias,
+        "tmux", "-L", TMUX_SOCKET, "source-file", REMOTE_TMUX_CONF
+      ], { timeout: 3000 })
     } catch {
       // Non-fatal: Ctrl+Q won't work but session will still function
     }

@@ -634,13 +634,18 @@ export function Home() {
     // y to quick-confirm a waiting session (sends Enter without attaching)
     if (evt.name === "y" && !evt.shift && !evt.ctrl) {
       const session = selectedSession()
+      log("y pressed: session=", session?.id, "status=", session?.status, "tmux=", session?.tmuxSession, "remote=", session?.remoteHost)
       if (session && session.status === "waiting" && session.tmuxSession) {
-        sendKeys(session.tmuxSession, "").then(() => {
+        getSessionManager().sendMessage(session.id, "").then(() => {
+          log("y sendMessage success")
           toast.show({ message: "✓ Confirmed", variant: "success", duration: 1500 })
           sync.refresh()
         }).catch((err) => {
+          log("y sendMessage error:", err)
           toast.error(err as Error)
         })
+      } else {
+        log("y: condition not met, session=", !!session, "status=", session?.status, "tmux=", !!session?.tmuxSession)
       }
       return
     }
