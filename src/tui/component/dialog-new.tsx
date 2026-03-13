@@ -2,7 +2,7 @@
  * New session dialog with Tab navigation and worktree support
  */
 
-import { createSignal, createEffect, For, Show, onCleanup } from "solid-js"
+import { createSignal, createEffect, on, For, Show, onCleanup } from "solid-js"
 import { TextAttributes, InputRenderable } from "@opentui/core"
 import { useKeyboard, useRenderer } from "@opentui/solid"
 import { useTheme } from "@tui/context/theme"
@@ -51,8 +51,11 @@ async function commandExists(cmd: string, cwd?: string): Promise<boolean> {
 }
 
 // History managers for autocomplete suggestions
-const projectPathHistory = new HistoryManager("dialog-new:project-paths", 15)
-const branchNameHistory = new HistoryManager("dialog-new:branch-names", 15)
+function getProjectPathHistory(remoteHost: string): HistoryManager {
+  const key = remoteHost ? `dialog-new:project-paths:${remoteHost}` : "dialog-new:project-paths"
+  return new HistoryManager(key, 30)
+}
+const branchNameHistory = new HistoryManager("dialog-new:branch-names", 30)
 
 // Persists form state across dialog.push/pop cycles (confirmation dialog)
 export interface SavedFormState {
@@ -65,6 +68,8 @@ export interface SavedFormState {
   projectPath: string
   useWorktree: boolean
   worktreeBranch: string
+  selectedRemoteHost: string
+  hostIndex: number
 }
 let _savedFormState: SavedFormState | null = null
 
@@ -96,13 +101,26 @@ export function DialogNew(props?: { prefill?: SavedFormState }) {
   const defaultToolIndex = TOOLS.findIndex(t => t.value === defaultTool)
 
   const remoteHosts = () => getConfig().remoteHosts ?? []
-  const [selectedRemoteHost, setSelectedRemoteHost] = createSignal<string>("")  // "" = local
-  const [hostIndex, setHostIndex] = createSignal(0)  // 0 = Local
+  const [selectedRemoteHost, setSelectedRemoteHost] = createSignal<string>(restore?.selectedRemoteHost ?? "")
+  const [hostIndex, setHostIndex] = createSignal(restore?.hostIndex ?? 0)
 
   const [title, setTitle] = createSignal(restore?.title ?? "")
   const [selectedTool, setSelectedTool] = createSignal<Tool>(defaultTool)
   const [customCommand, setCustomCommand] = createSignal(restore?.customCommand ?? "")
-  const [projectPath, setProjectPath] = createSignal(restore?.projectPath ?? process.cwd())
+
+  const storage = getStorage()
+
+  // Default path: restored value > last history entry for this host > process.cwd() (local only)
+  const getDefaultPath = (host: string) => {
+    const history = getProjectPathHistory(host).getHistory(storage)
+    return history[0] ?? (host ? "" : process.cwd())
+  }
+  const [projectPath, setProjectPath] = createSignal(restore?.projectPath ?? getDefaultPath(selectedRemoteHost()))
+
+  // When host changes (not on initial mount), update path to last used for that host
+  createEffect(on(selectedRemoteHost, (host) => {
+    setProjectPath(getDefaultPath(host))
+  }, { defer: true }))
   const [creating, setCreating] = createSignal(false)
   const [statusMessage, setStatusMessage] = createSignal("")
   const [spinnerFrame, setSpinnerFrame] = createSignal(0)
@@ -127,7 +145,6 @@ export function DialogNew(props?: { prefill?: SavedFormState }) {
   const [isInGitRepo, setIsInGitRepo] = createSignal(false)
   const [useBaseDevelop, setUseBaseDevelop] = createSignal(false)
   const [developExists, setDevelopExists] = createSignal(false)
-  const storage = getStorage()
 
   const [focusedField, setFocusedField] = createSignal<FocusField>("title")
   const [toolIndex, setToolIndex] = createSignal(restore?.toolIndex ?? (defaultToolIndex >= 0 ? defaultToolIndex : 0))
@@ -309,7 +326,7 @@ export function DialogNew(props?: { prefill?: SavedFormState }) {
         remoteHost: selectedRemoteHost() || undefined
       })
 
-      projectPathHistory.addEntry(storage, projectPath())
+      getProjectPathHistory(selectedRemoteHost()).addEntry(storage, projectPath())
       if (useWorktree() && worktreeBranchName) {
         branchNameHistory.addEntry(storage, worktreeBranchName)
       }
@@ -352,6 +369,8 @@ export function DialogNew(props?: { prefill?: SavedFormState }) {
       projectPath: projectPath(),
       useWorktree: useWorktree(),
       worktreeBranch: worktreeBranch(),
+      selectedRemoteHost: selectedRemoteHost(),
+      hostIndex: hostIndex(),
     }
 
     // Build summary lines for the confirmation dialog
@@ -359,6 +378,9 @@ export function DialogNew(props?: { prefill?: SavedFormState }) {
     lines.push(`Tool:   ${selectedTool()}`)
     const t = title().trim()
     lines.push(`Title:  ${t || "(auto-generated)"}`)
+    if (selectedRemoteHost()) {
+      lines.push(`Host:   ${selectedRemoteHost()}`)
+    }
     lines.push(`Path:   ${projectPath() || process.cwd()}`)
     if (useWorktree()) {
       const branch = worktreeBranch().trim()
@@ -680,7 +702,7 @@ export function DialogNew(props?: { prefill?: SavedFormState }) {
         <InputAutocomplete
           value={projectPath()}
           onInput={setProjectPath}
-          suggestions={projectPathHistory.getFiltered(storage, projectPath())}
+          suggestions={getProjectPathHistory(selectedRemoteHost()).getFiltered(storage, projectPath())}
           onSelect={setProjectPath}
           focusedBackgroundColor={theme.backgroundElement}
           cursorColor={theme.primary}

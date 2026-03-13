@@ -91,6 +91,7 @@ export class SessionManager {
   }
 
   private remoteSessionCaches = new Map<string, Set<string>>() // host -> session names
+  private reconnectingHosts = new Set<string>() // hosts with in-progress reconnect
 
   private executorCache = new Map<string, TmuxExecutor>()
 
@@ -229,9 +230,19 @@ export class SessionManager {
       // Verify SSH connection is alive
       const alive = await manager.check(host)
       if (!alive) {
-        for (const session of hostSessions) {
-          storage.writeStatus(session.id, "offline", session.tool)
+        // Trigger background reconnect (only one attempt at a time per host)
+        if (!this.reconnectingHosts.has(host)) {
+          this.reconnectingHosts.add(host)
+          manager.connect(host).then(() => {
+            log("Auto-reconnected SSH for host:", host)
+          }).catch((err) => {
+            log("Auto-reconnect failed for host:", host, err)
+          }).finally(() => {
+            this.reconnectingHosts.delete(host)
+          })
         }
+        // Preserve current statuses — don't flip to "offline" on transient failures.
+        // Sessions will be updated on the next successful poll cycle.
         continue
       }
 
@@ -243,10 +254,9 @@ export class SessionManager {
           "list-windows", "-a", "-F", "#{session_name}\t#{window_activity}"
         ])
         this.updateRemoteCache(host, stdout)
-      } catch {
-        for (const session of hostSessions) {
-          storage.writeStatus(session.id, "offline", session.tool)
-        }
+      } catch (err) {
+        log("list-windows failed for host:", host, err)
+        // Don't overwrite status — preserve current status on transient failure
         continue
       }
 
@@ -275,8 +285,9 @@ export class SessionManager {
           } else {
             storage.writeStatus(session.id, "idle", session.tool)
           }
-        } catch {
-          storage.writeStatus(session.id, "offline", session.tool)
+        } catch (err) {
+          log("capture-pane failed for session:", session.id, "host:", host, err)
+          // Don't overwrite status — preserve current status on transient failure
         }
       }
     }
@@ -603,7 +614,25 @@ export class SessionManager {
       throw new Error(`Session not found or not running: ${sessionId}`)
     }
 
-    await tmux.sendKeys(session.tmuxSession, message)
+    if (session.remoteHost) {
+      // Ensure SSH connection is alive before sending
+      const manager = getSshManager()
+      const alive = await manager.check(session.remoteHost)
+      log("sendMessage remote: host=", session.remoteHost, "alive=", alive, "tmux=", session.tmuxSession)
+      if (!alive) {
+        log("sendMessage: reconnecting SSH...")
+        await manager.connect(session.remoteHost)
+      }
+      const executor = this.getExecutor(session.remoteHost)
+      const args = ["send-keys", "-t", session.tmuxSession]
+      if (message) args.push("-l", message)
+      args.push("Enter")
+      log("sendMessage: exec args=", args)
+      await executor.exec(args)
+      log("sendMessage: exec done")
+    } else {
+      await tmux.sendKeys(session.tmuxSession, message)
+    }
     storage.updateSessionField(sessionId, "last_accessed", Date.now())
   }
 
