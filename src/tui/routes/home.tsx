@@ -12,7 +12,6 @@ import { useDialog } from "@tui/ui/dialog"
 import { DialogSelect } from "@tui/ui/dialog-select"
 import { useToast } from "@tui/ui/toast"
 import { DialogNew } from "@tui/component/dialog-new"
-import { DialogFork } from "@tui/component/dialog-fork"
 import { DialogRename } from "@tui/component/dialog-rename"
 import { DialogGroup } from "@tui/component/dialog-group"
 import { DialogMove } from "@tui/component/dialog-move"
@@ -425,41 +424,6 @@ export function Home() {
     }
   }
 
-  async function handleFork(session: Session) {
-    log("handleFork called for session:", session.id, "tool:", session.tool, "projectPath:", session.projectPath)
-
-    if (session.tool !== "claude") {
-      log("Fork rejected: not a claude session")
-      toast.show({ message: "Only Claude sessions can be forked", variant: "error", duration: 2000 })
-      return
-    }
-
-    log("Checking canFork for session:", session.id)
-    const canForkSession = await sync.session.canFork(session.id)
-    log("canFork result:", canForkSession)
-
-    if (!canForkSession) {
-      log("Fork rejected: no conversation found")
-      toast.show({
-        message: "Cannot fork: no conversation found. Have at least one exchange with Claude first.",
-        variant: "error",
-        duration: 3000
-      })
-      return
-    }
-
-    try {
-      log("Calling sync.session.fork")
-      const forked = await sync.session.fork({ sourceSessionId: session.id })
-      log("Fork successful:", forked.id)
-      toast.show({ message: `Forked as ${forked.title}`, variant: "success", duration: 2000 })
-      sync.refresh()
-    } catch (err) {
-      log("Fork error:", err)
-      toast.error(err as Error)
-    }
-  }
-
   async function handleHibernate(session: Session) {
     try {
       await sync.session.hibernate(session.id)
@@ -590,29 +554,7 @@ export function Home() {
       }
     }
 
-    // f to fork (quick)
-    if (evt.name === "f" && !evt.shift) {
-      log("f pressed, selectedSession:", selectedSession()?.id, selectedSession()?.tool)
-      const session = selectedSession()
-      if (session) {
-        log("Calling handleFork for session:", session.id)
-        handleFork(session)
-      }
-    }
-
-    // F (Shift+f) to fork with options dialog
-    if (evt.name === "f" && evt.shift) {
-      evt.preventDefault()
-      const session = selectedSession()
-      if (session) {
-        if (session.tool !== "claude") {
-          toast.show({ message: "Only Claude sessions can be forked", variant: "error", duration: 2000 })
-          return
-        }
-        dialog.push(() => <DialogFork session={session} />)
-      }
-      return
-    }
+    // f to duplicate — will be implemented in Task 5
 
     // z to hibernate session
     if (evt.name === "z" && !evt.shift && !evt.ctrl) {
@@ -1119,7 +1061,7 @@ export function Home() {
         </box>
         <box flexDirection="column" alignItems="center">
           <text fg={theme.text}>f</text>
-          <text fg={theme.textMuted}>fork</text>
+          <text fg={theme.textMuted}>dup</text>
         </box>
         <box flexDirection="column" alignItems="center">
           <text fg={theme.text}>z</text>
