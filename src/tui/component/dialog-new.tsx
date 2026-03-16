@@ -55,7 +55,7 @@ const projectPathHistory = new HistoryManager("dialog-new:project-paths", 15)
 const branchNameHistory = new HistoryManager("dialog-new:branch-names", 15)
 
 // Persists form state across dialog.push/pop cycles (confirmation dialog)
-interface SavedFormState {
+export interface SavedFormState {
   title: string
   selectedTool: Tool
   toolIndex: number
@@ -80,7 +80,7 @@ const TOOLS: { value: Tool; label: string; description: string }[] = [
 
 type FocusField = "title" | "host" | "tool" | "resumeSession" | "skipPermissions" | "customCommand" | "path" | "worktree" | "branch" | "copyClaudeDir"
 
-export function DialogNew() {
+export function DialogNew(props?: { prefill?: SavedFormState }) {
   const dialog = useDialog()
   const route = useRoute()
   const sync = useSync()
@@ -90,7 +90,7 @@ export function DialogNew() {
   const { config } = useConfig()
 
   // Restore state saved before confirmation push, then clear it
-  const restore = _savedFormState
+  const restore = props?.prefill ?? _savedFormState
   _savedFormState = null
 
   const defaultTool = restore?.selectedTool ?? (config().defaultTool || "claude")
