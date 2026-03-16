@@ -34,8 +34,9 @@ When working with AI coding agents, you often need to run multiple agents on dif
 
 - **Multi-Agent Dashboard** - View all your AI coding assistant sessions at a glance with real-time status indicators
 - **Smart Notifications** - Get notified when an agent finishes a task or needs your input, so you can context-switch efficiently
-- **Session Management** - Create, stop, restart, and delete coding agent sessions with keyboard shortcuts
+- **Session Management** - Create, stop, restart, delete, and duplicate coding agent sessions with keyboard shortcuts
 - **Git Worktree Integration** - Automatically create isolated git worktrees for each agent session, keeping your branches clean
+- **Remote SSH Sessions** - Manage AI agent sessions on remote servers via SSH, with automatic reconnection and connection health monitoring
 - **Tool Agnostic** - Works as a Claude Code manager, Gemini CLI orchestrator, OpenCode dashboard, or with any custom AI tool
 - **Keyboard-First** - Fully navigable terminal UI with keyboard shortcuts for maximum productivity
 - **Session Groups** - Organize sessions into groups by project or workflow
@@ -102,15 +103,14 @@ av
 | `d` | Delete session or group |
 | `r` | Restart session |
 | `R` | Rename session or group |
-| `f` | Fork session |
-| `F` | Fork session with worktree |
+| `f` | Duplicate session (pre-fills new session dialog with same config) |
 | `s` | Open shortcuts dialog |
 | `g` | Create new group |
 | `m` | Move session to group |
 | `1-9` | Jump to group by number |
 | `Ctrl+K` | Open command palette |
 | `?` | Show help |
-| `q` | Quit |
+| `q` | Quit (with confirmation) |
 
 **Inside attached session:**
 
@@ -118,7 +118,7 @@ av
 |-----|--------|
 | `Ctrl+K` | Detach and open command palette |
 | `Ctrl+T` | Toggle terminal pane (open/close) |
-| `Ctrl+O` | Toggle focus between panes |
+| `Ctrl+N` | Toggle focus between panes |
 | `Ctrl+Q` | Detach (return to dashboard) |
 
 ### Create a Session
@@ -128,6 +128,29 @@ av
 3. Enter the project path
 4. Optionally enable git worktree for an isolated branch
 5. Press `Enter` to create and attach
+
+### Remote SSH Sessions
+
+Agent View can manage AI agent sessions on remote servers over SSH. Sessions run in tmux on the remote host and are monitored in real-time from your local dashboard.
+
+Add remote hosts to `~/.agent-view/config.json`:
+
+```json
+{
+  "remoteHosts": [
+    { "alias": "my-server" },
+    { "alias": "gpu-box", "label": "GPU" }
+  ]
+}
+```
+
+The `alias` must match an entry in your `~/.ssh/config`. When creating a new session, select the remote host from the host picker. Agent View will:
+- Establish a persistent SSH ControlMaster connection
+- Run tmux on the remote host using the same custom config
+- Automatically reconnect if the SSH connection drops
+- Detect connection health via SSH keepalives (auto-disconnect after 30s of silence)
+
+When attaching to a remote session, the terminal shows a brief status line before tmux renders, and a "connection lost" message if the SSH connection drops while attached.
 
 ### Configuration
 
