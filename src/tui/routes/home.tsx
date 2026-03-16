@@ -13,7 +13,6 @@ import { DialogSelect } from "@tui/ui/dialog-select"
 import { useToast } from "@tui/ui/toast"
 import { DialogNew } from "@tui/component/dialog-new"
 import { DialogSessions } from "@tui/component/dialog-sessions"
-import { DialogFork } from "@tui/component/dialog-fork"
 import { DialogRename } from "@tui/component/dialog-rename"
 import { DialogGroup } from "@tui/component/dialog-group"
 import { DialogMove } from "@tui/component/dialog-move"
@@ -526,6 +525,7 @@ export function Home() {
     }
   }
 
+<<<<<<< HEAD
   async function handleFork(session: Session) {
     log("handleFork called for session:", session.id, "tool:", session.tool, "projectPath:", session.projectPath)
 
@@ -567,6 +567,8 @@ export function Home() {
     }
   }
 
+=======
+>>>>>>> d9c7fb4 (refactor: remove fork UI — dialog-fork, handleFork, f/F key handlers)
   async function handleHibernate(session: Session) {
     try {
       if (isRemoteSession(session)) {
@@ -727,34 +729,7 @@ export function Home() {
         dialog.push(() => <DialogMove session={session} />)
       }
     }
-
-    // f to fork (quick)
-    if (evt.name === "f" && !evt.shift) {
-      log("f pressed, selectedSession:", selectedSession()?.id, selectedSession()?.tool)
-      const session = selectedSession()
-      if (session) {
-        log("Calling handleFork for session:", session.id)
-        handleFork(session)
-      }
-    }
-
-    // F (Shift+f) to fork with options dialog
-    if (evt.name === "f" && evt.shift) {
-      evt.preventDefault()
-      const session = selectedSession()
-      if (session) {
-        if (isRemoteSession(session)) {
-          toast.show({ message: "Remote sessions cannot be forked from here", variant: "error", duration: 2000 })
-          return
-        }
-        if (session.tool !== "claude") {
-          toast.show({ message: "Only Claude sessions can be forked", variant: "error", duration: 2000 })
-          return
-        }
-        dialog.push(() => <DialogFork session={session} />)
-      }
-      return
-    }
+    // f to duplicate — will be implemented in Task 5
 
     // z to hibernate session
     if (evt.name === "z" && !evt.shift && !evt.ctrl) {
@@ -1299,7 +1274,7 @@ export function Home() {
         </box>
         <box flexDirection="column" alignItems="center">
           <text fg={theme.text}>f</text>
-          <text fg={theme.textMuted}>fork</text>
+          <text fg={theme.textMuted}>dup</text>
         </box>
         <box flexDirection="column" alignItems="center">
           <text fg={theme.text}>z</text>
