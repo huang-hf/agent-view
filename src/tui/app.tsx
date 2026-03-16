@@ -27,6 +27,7 @@ import { ConfigProvider } from "@tui/context/config"
 import { loadConfig, getConfig } from "@/core/config"
 import { getSshManager } from "@/core/ssh"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
+import { DialogSelect } from "@tui/ui/dialog-select"
 import { ToastProvider, useToast } from "@tui/ui/toast"
 import { CommandProvider, useCommandDialog } from "@tui/component/dialog-command"
 import { DialogSessions } from "@tui/component/dialog-sessions"
@@ -223,11 +224,29 @@ function App(props: { onExit: () => Promise<void>; onRendererReady: (r: CliRende
         category: "System",
         keybind: "Q",
         onSelect: async () => {
-          await props.onExit()
+          confirmAndExit()
         }
       }
     ])
   })
+
+  function confirmAndExit() {
+    dialog.push(() => (
+      <DialogSelect
+        title="Exit agent-view?"
+        options={[
+          { title: "Exit", value: "exit" },
+          { title: "Cancel", value: "cancel" },
+        ]}
+        onSelect={async (opt) => {
+          dialog.pop()
+          if (opt.value === "exit") {
+            await props.onExit()
+          }
+        }}
+      />
+    ))
+  }
 
   useKeyboard((evt) => {
     log("App useKeyboard:", evt.name, "ctrl:", evt.ctrl)
@@ -235,7 +254,7 @@ function App(props: { onExit: () => Promise<void>; onRendererReady: (r: CliRende
     if (dialog.stack.length > 0) return
 
     if (evt.ctrl && evt.name === "c") {
-      props.onExit()
+      confirmAndExit()
     }
 
     if (evt.ctrl && evt.name === "k") {
@@ -261,7 +280,7 @@ function App(props: { onExit: () => Promise<void>; onRendererReady: (r: CliRende
     }
 
     if (evt.name === "q") {
-      props.onExit()
+      confirmAndExit()
     }
 
     if (evt.name === "?") {

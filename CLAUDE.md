@@ -97,3 +97,14 @@ bun test         # Run tests
 ## Settings Dialog Convention
 
 When adding a new feature that has user-facing configuration (i.e. a new field in `AppConfig` in `src/core/config.ts`), you **must** also expose it in the TUI settings dialog at `src/tui/component/dialog-settings.tsx`. This ensures all config is discoverable via the `c` keybind on the home screen, not just via manual config.json editing. Follow the existing pattern: add an entry to the `options` array in `showSettingsList()` and a corresponding `show*()` method that uses `DialogSelect`.
+
+## Code Change Rules
+
+**Always `bun run build` after every code change before claiming it works.** Build errors are the minimum bar — if it doesn't build, it doesn't work.
+
+**When editing a file, always check its existing imports first.** Before using any component, hook, or utility in a file, verify it is already imported. If not, add the import. Missing imports cause runtime "Not Found" errors that don't surface until the app is actually run. Common components that are NOT auto-imported:
+- `DialogSelect` from `@tui/ui/dialog-select`
+- `DialogHeader` / `DialogFooter` from their respective paths
+- Any component from `@tui/component/*`
+
+**Never assume a symbol is imported** just because it is used in other files. Each file manages its own imports independently.

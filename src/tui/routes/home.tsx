@@ -574,11 +574,12 @@ export function Home() {
         claudeSessionMode: "new",
         skipPermissions: false,
         customCommand: session.command ?? "",
-        projectPath: session.projectPath,
-        useWorktree: false,
+        projectPath: session.worktreeRepo || session.projectPath,
+        useWorktree: !!session.worktreeRepo,
         worktreeBranch: "",
         selectedRemoteHost: session.remoteHost ?? "",
         hostIndex: hostIndex >= 0 ? hostIndex : 0,
+        groupPath: session.groupPath || undefined,
       }
       dialog.push(() => <DialogNew prefill={prefill} />)
     }
