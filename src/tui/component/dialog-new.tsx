@@ -70,6 +70,7 @@ export interface SavedFormState {
   worktreeBranch: string
   selectedRemoteHost: string
   hostIndex: number
+  groupPath?: string
 }
 let _savedFormState: SavedFormState | null = null
 
@@ -323,7 +324,8 @@ export function DialogNew(props?: { prefill?: SavedFormState }) {
         worktreeRepo,
         worktreeBranch: worktreeBranchName,
         claudeOptions,
-        remoteHost: selectedRemoteHost() || undefined
+        remoteHost: selectedRemoteHost() || undefined,
+        groupPath: restore?.groupPath
       })
 
       getProjectPathHistory(selectedRemoteHost()).addEntry(storage, projectPath())

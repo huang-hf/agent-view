@@ -550,19 +550,29 @@ export class SshTmuxExecutor implements TmuxExecutor {
     this.uploadTmuxConfSync(socketPath)
 
     process.stdout.write("\x1b[?1049l\x1b[2J\x1b[H\x1b[?25h")
-
+    // Brief connection hint (visible until tmux renders over it)
+    process.stdout.write(`\r\nConnecting to ${this.alias}... (Ctrl+Q to detach | auto-disconnect after 30s silence)\r\n\r\n`)
     const sshArgs = [
       "-t",
       "-o", "ConnectTimeout=10",
       "-o", "ControlMaster=no",
       "-o", `ControlPath=${socketPath}`,
+      "-o", "ServerAliveInterval=10",  // send keepalive every 10s
+      "-o", "ServerAliveCountMax=3",   // exit after 3 missed responses (~30s)
+      "-o", "TCPKeepAlive=yes",
       this.alias,
       ...this.tmuxArgs("attach-session", "-t", sessionName)
     ]
 
     // SSH -t for interactive PTY, attach to remote tmux session (blocking)
     const result = spawnSync("ssh", sshArgs, { stdio: "inherit" })
-
+    // If SSH exited abnormally (network loss detected via keepalive), show a
+    // visible message before restoring TUI so user knows what happened.
+    if (result.status !== 0 || result.error) {
+      process.stdout.write(`\r\n\x1b[33m[agent-view] Connection to ${this.alias} lost. Returning to TUI...\x1b[0m\r\n`)
+      // Pause so user can read the message before TUI buffer takes over
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1500)
+    }
     process.stdout.write("\x1b[2J\x1b[H\x1b[?1049h\x1b]0;Agent View\x07")
 
     // Propagate SSH/tmux errors so doAttach can show them as toast
