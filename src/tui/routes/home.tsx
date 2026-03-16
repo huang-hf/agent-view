@@ -11,7 +11,7 @@ import { useSync } from "@tui/context/sync"
 import { useDialog } from "@tui/ui/dialog"
 import { DialogSelect } from "@tui/ui/dialog-select"
 import { useToast } from "@tui/ui/toast"
-import { DialogNew } from "@tui/component/dialog-new"
+import { DialogNew, SavedFormState } from "@tui/component/dialog-new"
 import { DialogSessions } from "@tui/component/dialog-sessions"
 import { DialogRename } from "@tui/component/dialog-rename"
 import { DialogGroup } from "@tui/component/dialog-group"
@@ -21,7 +21,7 @@ import { DialogRecents } from "@tui/component/dialog-recents"
 import { DialogSettings } from "@tui/component/dialog-settings"
 import { DialogNewRemote } from "@tui/component/dialog-new-remote"
 import { DialogHelp } from "@tui/component/dialog-help"
-import { getShortcuts } from "@/core/config"
+import { getShortcuts, getConfig } from "@/core/config"
 import { getSessionManager } from "@/core/session"
 import { getSshManager } from "@/core/ssh"
 import { executeShortcut, getShortcutGroupPath } from "@/core/shortcut"
@@ -524,51 +524,6 @@ export function Home() {
       toast.error(err as Error)
     }
   }
-
-<<<<<<< HEAD
-  async function handleFork(session: Session) {
-    log("handleFork called for session:", session.id, "tool:", session.tool, "projectPath:", session.projectPath)
-
-    if (isRemoteSession(session)) {
-      log("Fork rejected: remote session")
-      toast.show({ message: "Remote sessions cannot be forked from here", variant: "error", duration: 2000 })
-      return
-    }
-
-    if (session.tool !== "claude") {
-      log("Fork rejected: not a claude session")
-      toast.show({ message: "Only Claude sessions can be forked", variant: "error", duration: 2000 })
-      return
-    }
-
-    log("Checking canFork for session:", session.id)
-    const canForkSession = await sync.session.canFork(session.id)
-    log("canFork result:", canForkSession)
-
-    if (!canForkSession) {
-      log("Fork rejected: no conversation found")
-      toast.show({
-        message: "Cannot fork: no conversation found. Have at least one exchange with Claude first.",
-        variant: "error",
-        duration: 3000
-      })
-      return
-    }
-
-    try {
-      log("Calling sync.session.fork")
-      const forked = await sync.session.fork({ sourceSessionId: session.id })
-      log("Fork successful:", forked.id)
-      toast.show({ message: `Forked as ${forked.title}`, variant: "success", duration: 2000 })
-      sync.refresh()
-    } catch (err) {
-      log("Fork error:", err)
-      toast.error(err as Error)
-    }
-  }
-
-=======
->>>>>>> d9c7fb4 (refactor: remove fork UI — dialog-fork, handleFork, f/F key handlers)
   async function handleHibernate(session: Session) {
     try {
       if (isRemoteSession(session)) {
@@ -729,7 +684,31 @@ export function Home() {
         dialog.push(() => <DialogMove session={session} />)
       }
     }
-    // f to duplicate — will be implemented in Task 5
+    // f to duplicate session
+    if (evt.name === "f" && !evt.shift) {
+      const session = selectedSession()
+      if (!session) return
+      if (isRemoteSession(session)) {
+        toast.show({ message: "Duplicate not supported for remote sessions yet", variant: "error", duration: 2000 })
+        return
+      }
+
+      const tools = ["claude", "opencode", "gemini", "codex", "custom", "shell"]
+      const toolIndex = Math.max(0, tools.indexOf(session.tool))
+
+      const prefill: SavedFormState = {
+        title: `${session.title}-copy`,
+        selectedTool: session.tool,
+        toolIndex,
+        claudeSessionMode: "new",
+        skipPermissions: false,
+        customCommand: session.command ?? "",
+        projectPath: session.projectPath,
+        useWorktree: false,
+        worktreeBranch: "",
+      }
+      dialog.push(() => <DialogNew prefill={prefill} />)
+    }
 
     // z to hibernate session
     if (evt.name === "z" && !evt.shift && !evt.ctrl) {
