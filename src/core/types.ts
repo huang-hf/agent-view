@@ -93,15 +93,6 @@ export interface SessionCreateOptions {
   remoteHost?: string
 }
 
-export interface SessionForkOptions {
-  sourceSessionId: string
-  title?: string
-  preserveHistory?: boolean
-  worktreePath?: string
-  worktreeRepo?: string
-  worktreeBranch?: string
-}
-
 export interface WorktreeConfig {
   defaultBaseBranch?: string
   command?: string

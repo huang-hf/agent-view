@@ -4,7 +4,7 @@
  */
 
 import { getStorage } from "./storage"
-import type { Session, SessionCreateOptions, SessionForkOptions, SessionStatus, Tool, Recent } from "./types"
+import type { Session, SessionCreateOptions, SessionStatus, Tool, Recent } from "./types"
 import { getToolCommand } from "./types"
 import * as tmux from "./tmux"
 import { localExecutor, type TmuxExecutor } from "./tmux"
@@ -14,7 +14,7 @@ import { randomUUID } from "crypto"
 import path from "path"
 import fs from "fs"
 import os from "os"
-import { buildForkCommand, buildClaudeCommand, copySessionToProject, sessionFileExists } from "./claude"
+import { buildClaudeCommand } from "./claude"
 import { getConfig, saveConfig } from "./config"
 
 const logFile = path.join(os.homedir(), ".agent-orchestrator", "debug.log")
@@ -397,181 +397,6 @@ export class SessionManager {
     }
 
     await saveConfig({ ...config, recents })
-  }
-
-  /**
-   * Get the Claude session ID for a session.
-   *
-   * The session must have claudeSessionId stored in toolData (set on creation).
-   * Falls back to tmux environment for sessions created during migration period.
-   * Also verifies the session file actually exists in Claude's config.
-   *
-   * @returns The Claude session ID or null if not found or file doesn't exist
-   */
-  private async getClaudeSessionId(session: Session): Promise<string | null> {
-    let claudeSessionId: string | null = null
-
-    // Primary: Check toolData (set when session was created)
-    if (session.toolData?.claudeSessionId && typeof session.toolData.claudeSessionId === "string") {
-      claudeSessionId = session.toolData.claudeSessionId
-      log("Got Claude session ID from toolData:", claudeSessionId)
-    }
-
-    // Fallback: Check tmux environment (for sessions created during migration)
-    if (!claudeSessionId) {
-      const tmuxEnvId = await tmux.getSessionEnvironment(session.tmuxSession, "CLAUDE_SESSION_ID")
-      if (tmuxEnvId) {
-        claudeSessionId = tmuxEnvId
-        log("Got Claude session ID from tmux environment:", claudeSessionId)
-      }
-    }
-
-    if (!claudeSessionId) {
-      log("No Claude session ID found - session may be too old")
-      return null
-    }
-
-    // Verify the session file actually exists
-    // This prevents fork errors when we stored an ID but Claude never created the file
-    if (!sessionFileExists(session.projectPath, claudeSessionId)) {
-      log("Claude session file does not exist:", claudeSessionId)
-      return null
-    }
-
-    return claudeSessionId
-  }
-
-  /**
-   * Fork an existing session.
-   *
-   * For Claude sessions, this:
-   * 1. Resolves the parent Claude session ID from the source session
-   * 2. Generates a new session ID for the fork
-   * 3. Copies session file to worktree if needed (different project path)
-   * 4. Creates a new session with --resume and --fork-session flags
-   *
-   * IMPORTANT: The fork command uses a pre-generated session ID that is
-   * stored in toolData. This ensures the ID Claude uses matches what we track.
-   */
-  async fork(options: SessionForkOptions): Promise<Session> {
-    log("fork() called with options:", options)
-    const storage = getStorage()
-    const source = storage.getSession(options.sourceSessionId)
-
-    if (!source) {
-      log("Source session not found:", options.sourceSessionId)
-      throw new Error(`Source session not found: ${options.sourceSessionId}`)
-    }
-
-    log("Source session:", { id: source.id, tool: source.tool, projectPath: source.projectPath })
-
-    const projectPath = options.worktreePath || source.projectPath
-
-    // Handle Claude session forking
-    if (source.tool === "claude") {
-      return this.forkClaudeSession(source, options, projectPath, storage)
-    }
-
-    // For non-Claude sessions, create a fresh session with same config
-    return this.create({
-      title: options.title || `${source.title}-fork`,
-      projectPath,
-      groupPath: source.groupPath,
-      tool: source.tool,
-      command: source.command,
-      wrapper: source.wrapper,
-      parentSessionId: source.id,
-      worktreePath: options.worktreePath,
-      worktreeRepo: options.worktreeRepo,
-      worktreeBranch: options.worktreeBranch
-    })
-  }
-
-  /**
-   * Fork a Claude session with conversation history.
-   */
-  private async forkClaudeSession(
-    source: Session,
-    options: SessionForkOptions,
-    projectPath: string,
-    storage: ReturnType<typeof getStorage>
-  ): Promise<Session> {
-    log("Forking Claude session")
-
-    // Step 1: Get the parent Claude session ID
-    const parentClaudeSessionId = await this.getClaudeSessionId(source)
-    if (!parentClaudeSessionId) {
-      log("No Claude session ID found")
-      throw new Error(
-        "Cannot fork: no conversation found in this session. " +
-        "Make sure you've had at least one exchange with Claude before forking."
-      )
-    }
-
-    // Step 2: Handle worktree - copy session file if needed
-    // Claude stores sessions per-project-path, so when forking to a worktree
-    // with a different path, we must copy the session file there.
-    if (options.worktreePath && options.worktreePath !== source.projectPath) {
-      log("Copying session file to worktree project directory")
-      const copied = copySessionToProject(
-        parentClaudeSessionId,
-        source.projectPath,
-        options.worktreePath
-      )
-      log(copied ? "Session file copied successfully" : "Warning: Failed to copy session file")
-    }
-
-    // Step 3: Generate new session ID for the fork
-    // CRITICAL: This ID must be passed to buildForkCommand AND stored in toolData.
-    // Previously, buildForkCommand generated its own ID, causing a mismatch.
-    const newClaudeSessionId = randomUUID()
-    log("Generated new Claude session ID:", newClaudeSessionId)
-
-    // Step 4: Build the fork command
-    const forkCommand = buildForkCommand({
-      projectPath,
-      parentSessionId: parentClaudeSessionId,
-      newSessionId: newClaudeSessionId
-    })
-    log("Fork command:", forkCommand)
-
-    // Step 5: Create the new session
-    const newSession = await this.create({
-      title: options.title || `${source.title}-fork`,
-      projectPath,
-      groupPath: source.groupPath,
-      tool: "claude",
-      command: forkCommand,
-      wrapper: source.wrapper,
-      parentSessionId: source.id,
-      worktreePath: options.worktreePath,
-      worktreeRepo: options.worktreeRepo,
-      worktreeBranch: options.worktreeBranch
-    })
-    log("Session created:", newSession.id)
-
-    // Step 6: Store the Claude session ID in toolData for future forks
-    storage.updateSessionField(newSession.id, "tool_data", JSON.stringify({
-      claudeSessionId: newClaudeSessionId,
-      parentClaudeSessionId: parentClaudeSessionId,
-      claudeDetectedAt: Date.now()
-    }))
-
-    log("Fork complete")
-    return newSession
-  }
-
-  /**
-   * Check if a session can be forked (has a tracked Claude session ID)
-   */
-  async canFork(sessionId: string): Promise<boolean> {
-    const session = getStorage().getSession(sessionId)
-    if (!session) return false
-    if (session.tool !== "claude") return false
-
-    // Check if session has a stored Claude session ID
-    const claudeSessionId = await this.getClaudeSessionId(session)
-    return claudeSessionId !== null
   }
 
   async delete(sessionId: string, options?: { deleteWorktree?: boolean }): Promise<void> {
