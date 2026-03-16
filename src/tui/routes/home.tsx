@@ -11,7 +11,7 @@ import { useSync } from "@tui/context/sync"
 import { useDialog } from "@tui/ui/dialog"
 import { DialogSelect } from "@tui/ui/dialog-select"
 import { useToast } from "@tui/ui/toast"
-import { DialogNew } from "@tui/component/dialog-new"
+import { DialogNew, SavedFormState } from "@tui/component/dialog-new"
 import { DialogRename } from "@tui/component/dialog-rename"
 import { DialogGroup } from "@tui/component/dialog-group"
 import { DialogMove } from "@tui/component/dialog-move"
@@ -19,7 +19,7 @@ import { DialogShortcuts } from "@tui/component/dialog-shortcuts"
 import { DialogRecents } from "@tui/component/dialog-recents"
 import { DialogSettings } from "@tui/component/dialog-settings"
 import { DialogHelp } from "@tui/component/dialog-help"
-import { getShortcuts } from "@/core/config"
+import { getShortcuts, getConfig } from "@/core/config"
 import { getSessionManager } from "@/core/session"
 import { getSshManager } from "@/core/ssh"
 import { executeShortcut, getShortcutGroupPath } from "@/core/shortcut"
@@ -554,7 +554,34 @@ export function Home() {
       }
     }
 
-    // f to duplicate — will be implemented in Task 5
+    // f to duplicate session
+    if (evt.name === "f" && !evt.shift) {
+      const session = selectedSession()
+      if (!session) return
+
+      const remoteHosts = getConfig().remoteHosts ?? []
+      const hostIndex = session.remoteHost
+        ? remoteHosts.findIndex(h => h.alias === session.remoteHost)
+        : 0
+
+      const TOOLS = ["claude", "opencode", "gemini", "codex", "custom", "shell"]
+      const toolIndex = Math.max(0, TOOLS.indexOf(session.tool))
+
+      const prefill: SavedFormState = {
+        title: `${session.title}-fork`,
+        selectedTool: session.tool,
+        toolIndex,
+        claudeSessionMode: "new",
+        skipPermissions: false,
+        customCommand: session.command ?? "",
+        projectPath: session.projectPath,
+        useWorktree: false,
+        worktreeBranch: "",
+        selectedRemoteHost: session.remoteHost ?? "",
+        hostIndex: hostIndex >= 0 ? hostIndex : 0,
+      }
+      dialog.push(() => <DialogNew prefill={prefill} />)
+    }
 
     // z to hibernate session
     if (evt.name === "z" && !evt.shift && !evt.ctrl) {
