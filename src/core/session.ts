@@ -273,11 +273,11 @@ export class SessionManager {
     const id = randomUUID()
     const tmuxName = tmux.generateSessionName(title)
 
-    // Generate Claude session ID for new Claude sessions (not forks/resumes)
-    // This allows us to track the session ID for forking later
+    // Generate Claude session ID for new Claude sessions (not resumes)
+    // This allows us to track the session ID for resuming or hibernating later
     let claudeSessionId: string | null = null
     const isNewClaudeSession = options.tool === "claude" &&
-      !options.command && // No custom command (fork uses custom command)
+      !options.command && // No custom command
       (!options.claudeOptions || options.claudeOptions.sessionMode === "new")
 
     if (isNewClaudeSession) {

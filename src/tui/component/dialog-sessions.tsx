@@ -108,17 +108,6 @@ export function DialogSessions() {
     }
   }
 
-  async function handleFork(sessionId: string) {
-    try {
-      const forked = await sync.session.fork({ sourceSessionId: sessionId })
-      toast.show({ message: `Forked as ${forked.title}`, variant: "success", duration: 2000 })
-      route.navigate({ type: "session", sessionId: forked.id })
-      dialog.clear()
-    } catch (err) {
-      toast.error(err as Error)
-    }
-  }
-
   function handleAttach(sessionId: string) {
     const session = sync.session.get(sessionId)
     if (!session) {
@@ -166,7 +155,6 @@ export function DialogSessions() {
       keybinds={[
         { key: "d", title: "Delete", onTrigger: (opt) => handleDelete(opt.value) },
         { key: "r", title: "Restart", onTrigger: (opt) => handleRestart(opt.value) },
-        { key: "f", title: "Fork", onTrigger: (opt) => handleFork(opt.value) },
         { key: "v", title: "View", onTrigger: (opt) => {
           route.navigate({ type: "session", sessionId: opt.value })
           dialog.clear()
