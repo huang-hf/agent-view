@@ -38,9 +38,10 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       const sessions = storage.loadSessions()
       const groups = storage.loadGroups()
 
-      // Build memory snapshot from manager
+      // Build memory snapshot from manager (skip hibernated — tmux session is gone)
       const mem: Record<string, number> = {}
       for (const s of sessions) {
+        if (s.status === "hibernated") continue
         const kb = manager.getMemoryKB(s.id)
         if (kb !== undefined) mem[s.id] = kb
       }

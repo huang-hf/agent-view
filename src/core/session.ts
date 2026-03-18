@@ -48,6 +48,7 @@ export class SessionManager {
   private _recentAutoHibernated: { id: string; title: string; idleMinutes: number }[] = []
   private remoteSessionCaches = new Map<string, Set<string>>() // host -> session names
   private reconnectingHosts = new Set<string>() // hosts with in-progress reconnect
+  private refreshingHosts = new Set<string>()   // hosts with in-progress refresh cycle
 
   private executorCache = new Map<string, TmuxExecutor>()
 
@@ -180,71 +181,84 @@ export class SessionManager {
     const remoteHosts = new Set(remoteSessions.map(s => s.remoteHost))
 
     for (const host of remoteHosts) {
+      // Skip this host if a previous refresh cycle is still in progress.
+      // Prevents command pile-up on slow/weak networks.
+      if (this.refreshingHosts.has(host)) {
+        log("Skipping refresh for host (previous cycle still running):", host)
+        continue
+      }
+
       const hostSessions = remoteSessions.filter(s => s.remoteHost === host)
       const manager = getSshManager()
 
-      // Verify SSH connection is alive
-      const alive = await manager.check(host)
-      if (!alive) {
-        // Trigger background reconnect (only one attempt at a time per host)
-        if (!this.reconnectingHosts.has(host)) {
-          this.reconnectingHosts.add(host)
-          manager.connect(host).then(() => {
-            log("Auto-reconnected SSH for host:", host)
-          }).catch((err) => {
-            log("Auto-reconnect failed for host:", host, err)
-          }).finally(() => {
-            this.reconnectingHosts.delete(host)
-          })
-        }
-        // Preserve current statuses — don't flip to "offline" on transient failures.
-        // Sessions will be updated on the next successful poll cycle.
-        continue
-      }
+      this.refreshingHosts.add(host)
 
-      const executor = this.getExecutor(host)
-
-      // Refresh remote session cache
       try {
-        const stdout = await executor.exec([
-          "list-windows", "-a", "-F", "#{session_name}\t#{window_activity}"
-        ])
-        this.updateRemoteCache(host, stdout)
-      } catch (err) {
-        log("list-windows failed for host:", host, err)
-        // Don't overwrite status — preserve current status on transient failure
-        continue
-      }
-
-      // Poll each remote session
-      for (const session of hostSessions) {
-        if (!session.tmuxSession) continue
-        if (session.status === "hibernated") continue
-
-        if (!this.remoteSessionExists(host, session.tmuxSession)) {
-          storage.writeStatus(session.id, "stopped", session.tool)
+        // Verify SSH connection is alive
+        const alive = await manager.check(host)
+        if (!alive) {
+          // Trigger background reconnect (only one attempt at a time per host)
+          if (!this.reconnectingHosts.has(host)) {
+            this.reconnectingHosts.add(host)
+            manager.connect(host).then(() => {
+              log("Auto-reconnected SSH for host:", host)
+            }).catch((err) => {
+              log("Auto-reconnect failed for host:", host, err)
+            }).finally(() => {
+              this.reconnectingHosts.delete(host)
+            })
+          }
+          // Preserve current statuses — don't flip to "offline" on transient failures.
+          // Sessions will be updated on the next successful poll cycle.
           continue
         }
 
-        try {
-          const output = await executor.exec([
-            "capture-pane", "-t", session.tmuxSession, "-p", "-S", "-100"
-          ])
-          const status = tmux.parseToolStatus(output, session.tool)
+        const executor = this.getExecutor(host)
 
-          if (status.isWaiting) {
-            storage.writeStatus(session.id, "waiting", session.tool)
-          } else if (status.hasError) {
-            storage.writeStatus(session.id, "error", session.tool)
-          } else if (status.isBusy) {
-            storage.writeStatus(session.id, "running", session.tool)
-          } else {
-            storage.writeStatus(session.id, "idle", session.tool)
-          }
+        // Refresh remote session cache
+        try {
+          const stdout = await executor.exec([
+            "list-windows", "-a", "-F", "#{session_name}\t#{window_activity}"
+          ])
+          this.updateRemoteCache(host, stdout)
         } catch (err) {
-          log("capture-pane failed for session:", session.id, "host:", host, err)
+          log("list-windows failed for host:", host, err)
           // Don't overwrite status — preserve current status on transient failure
+          continue
         }
+
+        // Poll each remote session
+        for (const session of hostSessions) {
+          if (!session.tmuxSession) continue
+          if (session.status === "hibernated") continue
+
+          if (!this.remoteSessionExists(host, session.tmuxSession)) {
+            storage.writeStatus(session.id, "stopped", session.tool)
+            continue
+          }
+
+          try {
+            const output = await executor.exec([
+              "capture-pane", "-t", session.tmuxSession, "-p", "-S", "-100"
+            ])
+            const status = tmux.parseToolStatus(output, session.tool)
+
+            if (status.isWaiting) {
+              storage.writeStatus(session.id, "waiting", session.tool)
+            } else if (status.hasError) {
+              storage.writeStatus(session.id, "error", session.tool)
+            } else if (status.isBusy) {
+              storage.writeStatus(session.id, "running", session.tool)
+            } else {
+              storage.writeStatus(session.id, "idle", session.tool)
+            }
+          } catch (err) {
+            log("capture-pane failed for session:", session.id, "host:", host, err)
+            // Don't overwrite status — preserve current status on transient failure
+          }
+        }
+      } finally {
+        this.refreshingHosts.delete(host)
       }
     }
 

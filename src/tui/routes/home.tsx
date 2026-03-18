@@ -296,8 +296,26 @@ export function Home() {
     sync.refresh()
   }
 
-  function doAttach(session: Session) {
+  async function doAttach(session: Session) {
     previewFetchAbort = true
+
+    // For remote sessions, ensure ControlMaster is alive before suspending the
+    // TUI. If the socket is dead (e.g. after laptop sleep), reconnect first so
+    // all subsequent SSH commands (conf upload + attach) reuse one multiplexed
+    // connection instead of each opening a fresh TCP handshake.
+    if (session.remoteHost) {
+      const sshMgr = getSshManager()
+      const alive = await sshMgr.check(session.remoteHost)
+      if (!alive) {
+        try {
+          await sshMgr.connect(session.remoteHost)
+        } catch (err) {
+          toast.error(err as Error)
+          return
+        }
+      }
+    }
+
     renderer.suspend()
     try {
       if (session.remoteHost) {
@@ -818,7 +836,7 @@ export function Home() {
           </Show>
         }>
           <box flexShrink={0}>
-            <text>{" \uD83D\uDE34"}</text>
+            <text fg={theme.textMuted}>{" zzz"}</text>
           </box>
         </Show>
 
