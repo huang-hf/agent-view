@@ -520,12 +520,16 @@ export class SshControlManager {
       "-o", `ControlPath=${socketPath}`,
       alias,
       remoteCmd
-    ])
+    ], { timeout: 10000 })
     return stdout
   }
 }
 
 export class SshTmuxExecutor implements TmuxExecutor {
+  private lastUploadedConf: string | null = null
+  private lastUploadTime = 0
+  private static CONF_CACHE_TTL = 5 * 60 * 1000 // 5 minutes
+
   constructor(
     private alias: string,
     private manager: SshControlManager
@@ -607,6 +611,16 @@ export class SshTmuxExecutor implements TmuxExecutor {
   private uploadTmuxConfSync(socketPath: string): void {
     try {
       const confContent = fs.readFileSync(LOCAL_TMUX_CONF, "utf-8")
+
+      // Skip upload if conf content hasn't changed and was uploaded recently
+      const now = Date.now()
+      if (
+        this.lastUploadedConf === confContent &&
+        now - this.lastUploadTime < SshTmuxExecutor.CONF_CACHE_TTL
+      ) {
+        return
+      }
+
       // Upload conf file
       execFileSync("ssh", [
         "-o", "ControlMaster=no",
@@ -622,6 +636,10 @@ export class SshTmuxExecutor implements TmuxExecutor {
         this.alias,
         "tmux", "-L", TMUX_SOCKET, "source-file", REMOTE_TMUX_CONF
       ], { timeout: 3000 })
+
+      // Cache successful upload
+      this.lastUploadedConf = confContent
+      this.lastUploadTime = now
     } catch {
       // Non-fatal: Ctrl+Q won't work but session will still function
     }

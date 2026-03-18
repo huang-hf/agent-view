@@ -170,6 +170,13 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   useKeyboard((evt) => {
     setStore("input", "keyboard")
 
+    if (evt.name === "escape") {
+      evt.preventDefault()
+      evt.stopPropagation()
+      dialog.pop()
+      return
+    }
+
     if (evt.name === "up" || (evt.ctrl && evt.name === "p")) move(-1)
     if (evt.name === "down" || (evt.ctrl && evt.name === "n")) move(1)
     if (evt.name === "pageup") move(-10)
@@ -210,27 +217,29 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
             esc
           </text>
         </box>
-        <box paddingTop={1}>
-          <input
-            onInput={(e) => {
-              batch(() => {
-                setStore("filter", e)
-                props.onFilter?.(e)
-              })
-            }}
-            focusedBackgroundColor={theme.backgroundPanel}
-            cursorColor={theme.primary}
-            focusedTextColor={theme.textMuted}
-            ref={(r) => {
-              inputRef = r
-              setTimeout(() => {
-                if (!inputRef || inputRef.isDestroyed) return
-                inputRef.focus()
-              }, 1)
-            }}
-            placeholder={props.placeholder ?? "Search"}
-          />
-        </box>
+        <Show when={props.placeholder !== undefined}>
+          <box paddingTop={1}>
+            <input
+              onInput={(e) => {
+                batch(() => {
+                  setStore("filter", e)
+                  props.onFilter?.(e)
+                })
+              }}
+              focusedBackgroundColor={theme.backgroundPanel}
+              cursorColor={theme.primary}
+              focusedTextColor={theme.textMuted}
+              ref={(r) => {
+                inputRef = r
+                setTimeout(() => {
+                  if (!inputRef || inputRef.isDestroyed) return
+                  inputRef.focus()
+                }, 1)
+              }}
+              placeholder={props.placeholder}
+            />
+          </box>
+        </Show>
       </box>
       <Show
         when={grouped().length > 0}
