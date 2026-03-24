@@ -118,7 +118,7 @@ av
 |-----|--------|
 | `Ctrl+K` | Detach and open command palette |
 | `Ctrl+T` | Toggle terminal pane (open/close) |
-| `Ctrl+N` | Toggle focus between panes |
+| `Ctrl+B` then `o` | Toggle focus between panes (tmux default) |
 | `Ctrl+Q` | Detach (return to dashboard) |
 
 ### Create a Session

@@ -101,6 +101,26 @@ describe("parseToolStatus", () => {
     expect(status.isWaiting).toBe(true)
   })
 
+  test("detects [y/N] prompt waiting patterns", () => {
+    const output = "Run command? [y/N]"
+    const status = parseToolStatus(output, "codex")
+    expect(status.isWaiting).toBe(true)
+  })
+
+  test("detects Codex approval header as waiting", () => {
+    const output = `Approval required
+Run command? [y/N]`
+    const status = parseToolStatus(output, "codex")
+    expect(status.isWaiting).toBe(true)
+  })
+
+  test("detects Codex press enter confirm prompt as waiting", () => {
+    const output = `Apply patch?
+Press Enter to confirm`
+    const status = parseToolStatus(output, "codex")
+    expect(status.isWaiting).toBe(true)
+  })
+
   test("detects Press enter to continue", () => {
     const output = "Operation completed.\nPress enter to continue..."
     const status = parseToolStatus(output)

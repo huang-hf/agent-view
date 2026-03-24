@@ -619,12 +619,14 @@ export function Home() {
       return
     }
 
-    // y to quick-confirm a waiting session (sends Enter without attaching)
+    // y to quick-confirm a waiting session without attaching.
+    // Codex commonly uses [y/N], so it needs an explicit "y" before Enter.
     if (evt.name === "y" && !evt.shift && !evt.ctrl) {
       const session = selectedSession()
       log("y pressed: session=", session?.id, "status=", session?.status, "tmux=", session?.tmuxSession, "remote=", session?.remoteHost)
       if (session && session.status === "waiting" && session.tmuxSession) {
-        getSessionManager().sendMessage(session.id, "").then(() => {
+        const confirmInput = session.tool === "codex" ? "y" : ""
+        getSessionManager().sendMessage(session.id, confirmInput).then(() => {
           log("y sendMessage success")
           toast.show({ message: "✓ Confirmed", variant: "success", duration: 1500 })
           sync.refresh()
