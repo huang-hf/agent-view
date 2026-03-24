@@ -507,6 +507,7 @@ const CLAUDE_EXITED_PATTERNS = [
 const WAITING_PATTERNS = [
   /\? \(y\/n\)/i,
   /\[Y\/n\]/i,
+  /\[y\/N\]/i,
   /Press enter to continue/i,
   /waiting for.*input/i,
   /do you want to/i,
@@ -515,6 +516,17 @@ const WAITING_PATTERNS = [
   /don't ask again for these files/i,
   /tell codex what to do differently/i,
   /(?:^|\n)\s*[›>]\s*1\.\s*Yes,\s*proceed\s*\(y\)/i
+]
+
+// Codex CLI often shows an explicit approval header plus a confirmation footer.
+// Keep these separate from generic tool rules so we can tighten behavior without
+// affecting other tools.
+const CODEX_WAITING_PATTERNS = [
+  /approval required/i,
+  /confirm to continue/i,
+  /press (enter|return) to (confirm|continue)/i,
+  /run command\?/i,
+  /apply patch\?/i,
 ]
 
 const ERROR_PATTERNS = [
@@ -573,6 +585,9 @@ export function parseToolStatus(output: string, tool?: string): ToolStatus {
       isWaiting = hasBaseWaitingCue || (hasNumberedYes && hasPromptContext)
     }
     // If Claude has exited, both isBusy and isWaiting stay false -> will become idle
+  } else if (tool === "codex") {
+    isWaiting = WAITING_PATTERNS.some(p => p.test(lastLines)) ||
+      CODEX_WAITING_PATTERNS.some(p => p.test(lastLines))
   } else {
     // Generic tool detection
     isWaiting = WAITING_PATTERNS.some(p => p.test(lastLines))
