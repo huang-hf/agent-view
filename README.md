@@ -35,7 +35,7 @@ When working with AI coding agents, you often need to run multiple agents on dif
 - **Multi-Agent Dashboard** - View all your AI coding assistant sessions at a glance with real-time status indicators
 - **Smart Notifications** - Get notified when an agent finishes a task or needs your input, so you can context-switch efficiently
 - **Session Management** - Create, stop, restart, delete, and duplicate coding agent sessions with keyboard shortcuts
-- **Git Worktree Integration** - Automatically create isolated git worktrees for each agent session, keeping your branches clean
+- **Git Worktree Integration** - Automatically create isolated git worktrees for each agent session, keeping your branches clean. Optionally sync with the latest remote branch before creating each worktree
 - **Remote SSH Sessions** - Manage AI agent sessions on remote servers via SSH, with automatic reconnection and connection health monitoring
 - **Tool Agnostic** - Works as a Claude Code manager, Gemini CLI orchestrator, OpenCode dashboard, or with any custom AI tool
 - **Keyboard-First** - Fully navigable terminal UI with keyboard shortcuts for maximum productivity
@@ -152,6 +152,28 @@ The `alias` must match an entry in your `~/.ssh/config`. When creating a new ses
 
 When attaching to a remote session, the terminal shows a brief status line before tmux renders, and a "connection lost" message if the SSH connection drops while attached.
 
+### Git Worktree Sync
+
+When working in teams, your local `main` branch can fall behind. Enable `syncRemoteBranch` to automatically fetch the latest remote commits and base every new worktree on them:
+
+```json
+{
+  "worktree": {
+    "syncRemoteBranch": "origin/main"
+  }
+}
+```
+
+With this set, every time you create a new session (or duplicate an existing one with `f`), Agent View will:
+1. Run `git fetch origin` against your repo
+2. Create the new worktree branch from `origin/main` instead of your local HEAD
+
+This ensures each new agent session starts from the latest code, without needing to manually pull first.
+
+You can configure this from the TUI: press `c` to open Settings → **Worktree: sync remote branch**. Presets include `origin/main`, `origin/master`, `origin/develop`, or any custom remote branch.
+
+> **Note:** The "Base on develop" checkbox in the new session dialog takes priority over `syncRemoteBranch` when checked.
+
 ### Configuration
 
 Create `~/.agent-view/config.json` to customize defaults:
@@ -161,7 +183,7 @@ Create `~/.agent-view/config.json` to customize defaults:
   "defaultTool": "claude",
   "worktree": {
     "defaultBaseBranch": "main",
-    "command": "git worktree"
+    "syncRemoteBranch": "origin/main"
   },
   "shortcuts": [
     {
