@@ -106,6 +106,7 @@ export function Home() {
   onCleanup(() => clearInterval(autoHibernateInterval))
 
   const [selectedIndex, setSelectedIndex] = createSignal(0)
+  const [inputMode, setInputMode] = createSignal<"keyboard" | "mouse">("keyboard")
   const [previewContent, setPreviewContent] = createSignal<string>("")
   const [previewLoading, setPreviewLoading] = createSignal(false)
   let scrollRef: ScrollBoxRenderable | undefined
@@ -457,6 +458,8 @@ export function Home() {
 
     if (dialog.stack.length > 0) return
 
+    setInputMode("keyboard")
+
     if (evt.name === "up" || evt.name === "k") {
       move(-1)
     }
@@ -704,11 +707,15 @@ export function Home() {
         paddingRight={1}
         height={1}
         backgroundColor={isSelected() ? theme.primary : theme.backgroundElement}
+        onMouseMove={() => setInputMode("mouse")}
         onMouseUp={() => {
+          setInputMode("mouse")
           setSelectedIndex(props.index)
           sync.group.toggle(props.group.path)
         }}
-        onMouseOver={() => setSelectedIndex(props.index)}
+        onMouseOver={() => {
+          if (inputMode() === "mouse") setSelectedIndex(props.index)
+        }}
       >
         {/* Expand/collapse arrow */}
         <text fg={isSelected() ? theme.selectedListItemText : theme.accent}>
@@ -786,11 +793,15 @@ export function Home() {
         paddingRight={1}
         height={1}
         backgroundColor={isSelected() ? theme.primary : undefined}
+        onMouseMove={() => setInputMode("mouse")}
         onMouseUp={() => {
+          setInputMode("mouse")
           setSelectedIndex(props.index)
           handleAttach(props.session)
         }}
-        onMouseOver={() => setSelectedIndex(props.index)}
+        onMouseOver={() => {
+          if (inputMode() === "mouse") setSelectedIndex(props.index)
+        }}
       >
         {/* Status icon with fixed width */}
         <box width={2} flexShrink={0}>
