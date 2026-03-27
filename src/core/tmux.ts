@@ -341,9 +341,12 @@ export async function resizePane(name: string, width: number, height: number): P
  * Attach to a tmux session (replaces current terminal)
  */
 export function attachSession(name: string): void {
+  // Unset TMUX to allow nested sessions (we manage our own tmux server)
+  const env = { ...process.env }
+  delete env.TMUX
   const child = spawn("tmux", tmuxSpawnArgs("attach-session", "-t", name), {
     stdio: "inherit",
-    env: process.env
+    env
   })
 
   child.on("exit", (code) => {
@@ -547,13 +550,16 @@ export function parseToolStatus(output: string, tool?: string): ToolStatus {
  */
 export async function attachWithPty(sessionName: string): Promise<void> {
   const ptyModule = await getPty()
+  // Unset TMUX to allow nested sessions (we manage our own tmux server)
+  const env = { ...process.env }
+  delete env.TMUX
   return new Promise((resolve) => {
     const ptyProcess = ptyModule.spawn("tmux", tmuxSpawnArgs("attach-session", "-t", sessionName), {
       name: "xterm-256color",
       cols: process.stdout.columns || 80,
       rows: process.stdout.rows || 24,
       cwd: process.cwd(),
-      env: process.env as { [key: string]: string }
+      env: env as { [key: string]: string }
     })
 
     let isDetaching = false
@@ -733,9 +739,12 @@ export function attachSessionSync(sessionName: string): void {
   process.stdout.write("\x1b[?25h")
 
   // Attach to tmux - this blocks until user detaches (Ctrl+Q or Ctrl+B d)
+  // Unset TMUX to allow nested sessions (we manage our own tmux server)
+  const env = { ...process.env }
+  delete env.TMUX
   spawnSync("tmux", tmuxSpawnArgs("attach-session", "-t", sessionName), {
     stdio: "inherit",
-    env: process.env
+    env
   })
 
   // Clear screen and re-enter alternate buffer for TUI
