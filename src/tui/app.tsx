@@ -31,6 +31,7 @@ import { CommandProvider, useCommandDialog } from "@tui/component/dialog-command
 import { DialogSessions } from "@tui/component/dialog-sessions"
 import { DialogNew } from "@tui/component/dialog-new"
 import { DialogNewRemote } from "@tui/component/dialog-new-remote"
+import { DialogNewWizard } from "@tui/component/dialog-new-wizard"
 import { DialogUpdate } from "@tui/component/dialog-update"
 import { checkForUpdate } from "@/core/updater"
 import { Home } from "@tui/routes/home"
@@ -196,7 +197,7 @@ function App(props: { onExit: () => Promise<void>; onRendererReady: (r: CliRende
         keybind: "N",
         suggested: true,
         onSelect: () => {
-          dialog.replace(() => <DialogNew />)
+          dialog.replace(() => <DialogNewWizard />)
         }
       },
       {
@@ -235,8 +236,8 @@ function App(props: { onExit: () => Promise<void>; onRendererReady: (r: CliRende
 
     if (evt.name === "n" && !evt.shift) {
       evt.preventDefault()
-      log("Opening new dialog from App")
-      dialog.replace(() => <DialogNew />)
+      log("Opening new session wizard from App")
+      dialog.replace(() => <DialogNewWizard />)
     }
 
     if (evt.name === "n" && evt.shift) {
