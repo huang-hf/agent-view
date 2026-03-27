@@ -469,7 +469,11 @@ const WAITING_PATTERNS = [
   /\[y\/N\]/i,
   /Press enter to continue/i,
   /waiting for.*input/i,
-  /do you want to/i
+  /do you want to/i,
+  /would you like to make the following edits/i,
+  /yes, proceed \(y\)/i,
+  /don't ask again for these files/i,
+  /tell codex what to do differently/i,
 ]
 
 // Codex CLI often shows an explicit approval header plus a confirmation footer.
