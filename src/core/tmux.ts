@@ -242,11 +242,14 @@ export async function killSession(name: string): Promise<void> {
 }
 
 /**
- * Rename a tmux session
+ * Rename a tmux session and its window
  */
 export async function renameSession(oldName: string, newName: string): Promise<void> {
   try {
+    // Rename the session
     await execAsync(tmuxCmd(`rename-session -t "${oldName}" "${newName}"`))
+    // Also rename the window to match
+    await execAsync(tmuxCmd(`rename-window -t "${newName}" "${newName}"`))
     // Update cache
     const activity = sessionCache.data.get(oldName)
     if (activity !== undefined) {
