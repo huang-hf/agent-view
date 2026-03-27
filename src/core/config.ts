@@ -11,6 +11,7 @@ import type { Tool, Shortcut, Recent } from "./types"
 export interface WorktreeConfig {
   defaultBaseBranch?: string
   autoCleanup?: boolean
+  syncRemoteBranch?: string  // if set, fetch remote and base new worktrees on this branch (e.g. "origin/main")
 }
 
 export interface LastRemoteSession {

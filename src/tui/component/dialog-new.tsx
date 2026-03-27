@@ -17,7 +17,7 @@ import { DialogHeader } from "@tui/ui/dialog-header"
 import { DialogFooter } from "@tui/ui/dialog-footer"
 import { ActionButton } from "@tui/ui/action-button"
 import { attachSessionSync } from "@/core/tmux"
-import { isGitRepo, getRepoRoot, createWorktree, generateBranchName, generateWorktreePath, sanitizeBranchName, branchExists, copyClaudeDir } from "@/core/git"
+import { isGitRepo, getRepoRoot, createWorktree, generateBranchName, generateWorktreePath, sanitizeBranchName, branchExists, copyClaudeDir, fetchRemote } from "@/core/git"
 import { HistoryManager } from "@/core/history"
 import { getStorage } from "@/core/storage"
 import type { Tool, ClaudeSessionMode, RemoteHost } from "@/core/types"
@@ -283,12 +283,16 @@ export function DialogNew(props?: { prefill?: SavedFormState }) {
           ? sanitizeBranchName(worktreeBranch())
           : generateBranchName(title() || undefined)
 
-        const worktreeConfig = config().worktree || {}
+        const worktreeConfig = getConfig().worktree || {}
 
-        // Priority: 1) "Base on develop" checkbox, 2) config default, 3) undefined (HEAD)
+        // Priority: 1) "Base on develop" checkbox, 2) syncRemoteBranch (fetch + use remote), 3) config default, 4) HEAD
         let baseBranch: string | undefined
         if (useBaseDevelop()) {
           baseBranch = "develop"
+        } else if (worktreeConfig.syncRemoteBranch) {
+          setStatusMessage("Fetching remote...")
+          await fetchRemote(repoRoot)
+          baseBranch = worktreeConfig.syncRemoteBranch
         } else if (worktreeConfig.defaultBaseBranch && worktreeConfig.defaultBaseBranch !== "main") {
           baseBranch = worktreeConfig.defaultBaseBranch
         }

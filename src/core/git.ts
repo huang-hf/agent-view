@@ -332,6 +332,18 @@ export function generateBranchName(title?: string): string {
   return `${base}-${timestamp}`
 }
 
+/**
+ * Fetch from a remote (default: origin).
+ */
+export async function fetchRemote(repoDir: string, remote = "origin"): Promise<void> {
+  try {
+    await execAsync(`git -C "${repoDir}" fetch "${remote}"`)
+  } catch (err: any) {
+    const output = err.stderr || err.stdout || err.message
+    throw new Error(`failed to fetch from ${remote}: ${output}`)
+  }
+}
+
 export async function pruneWorktrees(repoDir: string): Promise<void> {
   try {
     await execAsync(`git -C "${repoDir}" worktree prune`)
