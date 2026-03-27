@@ -343,11 +343,13 @@ export async function pruneWorktrees(repoDir: string): Promise<void> {
 
 /**
  * Copy the .claude directory from the repo root into a worktree.
+ * Always overwrites settings.json from the repo root so the worktree
+ * starts with the latest permissions and configuration.
  * No-op if the source directory does not exist.
  */
 export async function copyClaudeDir(repoRoot: string, worktreePath: string): Promise<void> {
   const src = path.join(repoRoot, ".claude")
   const dest = path.join(worktreePath, ".claude")
   if (!existsSync(src)) return
-  await cp(src, dest, { recursive: true })
+  await cp(src, dest, { recursive: true, force: true })
 }

@@ -512,7 +512,11 @@ const WAITING_PATTERNS = [
   /\[Y\/n\]/i,
   /Press enter to continue/i,
   /waiting for.*input/i,
-  /do you want to/i
+  /do you want to/i,
+  /would you like to make the following edits/i,
+  /yes, proceed \(y\)/i,
+  /don't ask again for these files/i,
+  /tell codex what to do differently/i,
 ]
 
 const ERROR_PATTERNS = [
