@@ -384,3 +384,56 @@ export class SSHRunner {
     }
   }
 }
+
+export class SshControlManager {
+  async connect(alias: string): Promise<void> {
+    const args = [
+      ...sshOptions(alias),
+      "-fN",
+      alias
+    ]
+    await execFileAsync("ssh", args, {
+      timeout: SSH_TIMEOUT * 1000
+    })
+  }
+
+  async check(alias: string): Promise<boolean> {
+    try {
+      const args = [
+        ...sshOptions(alias),
+        "-O", "check",
+        alias
+      ]
+      await execFileAsync("ssh", args, {
+        timeout: SSH_TIMEOUT * 1000
+      })
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  async disconnect(alias: string): Promise<void> {
+    try {
+      const args = [
+        ...sshOptions(alias),
+        "-O", "exit",
+        alias
+      ]
+      await execFileAsync("ssh", args, {
+        timeout: SSH_TIMEOUT * 1000
+      })
+    } catch {
+      // Ignore disconnect errors
+    }
+  }
+}
+
+let sshManagerSingleton: SshControlManager | null = null
+
+export function getSshManager(): SshControlManager {
+  if (!sshManagerSingleton) {
+    sshManagerSingleton = new SshControlManager()
+  }
+  return sshManagerSingleton
+}
