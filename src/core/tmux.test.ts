@@ -152,6 +152,14 @@ Press Enter to confirm`
     expect(status.isBusy).toBe(false)
   })
 
+  test("does not treat generic numbered '1. Yes' content as waiting", () => {
+    const output = `Implementation notes:
+1. Yes, we should refactor this module
+2. No blocking issues found`
+    const status = parseToolStatus(output, "claude")
+    expect(status.isWaiting).toBe(false)
+  })
+
   test("detects Claude at prompt as idle (not waiting)", () => {
     // Claude at regular prompt is idle, not blocked on anything
     const output = `Claude finished the task.

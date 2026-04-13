@@ -16,6 +16,8 @@ import fs from "fs"
 import os from "os"
 import { buildClaudeCommand } from "./claude"
 import { getConfig, saveConfig } from "./config"
+import { addRecent } from "./recents"
+import { paginateTranscript, type TranscriptPageOptions } from "./transcript"
 
 const logFile = path.join(os.homedir(), ".agent-orchestrator", "debug.log")
 function log(...args: unknown[]) {
@@ -42,8 +44,34 @@ function generateTitle(): string {
   return `${adj}-${noun}`
 }
 
+const LOCAL_WAITING_EXIT_GRACE_POLLS = 2
 const REMOTE_WAITING_EXIT_GRACE_POLLS = 2
 const REMOTE_STOP_GRACE_POLLS = 3
+
+function deriveLocalSessionStatus(status: tmux.ToolStatus, isActive: boolean): SessionStatus {
+  if (status.isWaiting) return "waiting"
+  if (status.hasError) return "error"
+  if (status.isBusy || isActive) return "running"
+  return "idle"
+}
+
+function stabilizeWaitingTransition(
+  previous: SessionStatus,
+  candidate: SessionStatus,
+  polls: number,
+  gracePolls = LOCAL_WAITING_EXIT_GRACE_POLLS
+): { next: SessionStatus; polls: number } {
+  if (candidate === "waiting") {
+    return { next: "waiting", polls: 0 }
+  }
+  if (previous === "waiting" && (candidate === "idle" || candidate === "running")) {
+    const nextPolls = polls + 1
+    if (nextPolls < gracePolls) {
+      return { next: "waiting", polls: nextPolls }
+    }
+  }
+  return { next: candidate, polls: 0 }
+}
 
 export function deriveRemoteSessionStatus(
   status: tmux.ToolStatus
@@ -93,11 +121,25 @@ export function stabilizeRemoteStoppedTransition(
 
   return { next: "stopped", polls: 0 }
 }
-
 export class SessionManager {
   private refreshInterval: NodeJS.Timeout | null = null
+  private refreshInFlight = false
   private memoryMap = new Map<string, number>() // sessionId → KB
   private _recentAutoHibernated: { id: string; title: string; idleMinutes: number }[] = []
+  private localWaitingExitPolls = new Map<string, number>() // sessionId -> consecutive non-waiting polls
+
+  private stabilizeLocalWaitingStatus(
+    sessionId: string,
+    previous: SessionStatus,
+    candidate: SessionStatus
+  ): SessionStatus {
+    const currentPolls = this.localWaitingExitPolls.get(sessionId) || 0
+    const resolved = stabilizeWaitingTransition(previous, candidate, currentPolls)
+    if (resolved.polls > 0) this.localWaitingExitPolls.set(sessionId, resolved.polls)
+    else this.localWaitingExitPolls.delete(sessionId)
+    return resolved.next
+  }
+
   private remoteSessionCaches = new Map<string, Set<string>>() // host -> session names
   private reconnectingHosts = new Set<string>() // hosts with in-progress reconnect
   private refreshingHosts = new Set<string>()   // hosts with in-progress refresh cycle
@@ -169,7 +211,13 @@ export class SessionManager {
     if (this.refreshInterval) return
 
     this.refreshInterval = setInterval(async () => {
-      await this.refreshStatuses()
+      if (this.refreshInFlight) return
+      this.refreshInFlight = true
+      try {
+        await this.refreshStatuses()
+      } finally {
+        this.refreshInFlight = false
+      }
     }, intervalMs)
   }
 
@@ -178,6 +226,7 @@ export class SessionManager {
       clearInterval(this.refreshInterval)
       this.refreshInterval = null
     }
+    this.refreshInFlight = false
   }
 
   async refreshStatuses(): Promise<void> {
@@ -218,19 +267,12 @@ export class SessionManager {
         })
         const status = tmux.parseToolStatus(output, session.tool)
 
-        if (status.isWaiting) {
-          // Agent is waiting for user input (permission prompt, question, etc.)
-          storage.writeStatus(session.id, "waiting", session.tool)
-        } else if (status.hasError) {
-          // Agent encountered an error
-          storage.writeStatus(session.id, "error", session.tool)
-        } else if (status.isBusy || isActive) {
-          // Agent is actively working (spinner visible, recent output, etc.)
-          storage.writeStatus(session.id, "running", session.tool)
-        } else {
-          // No recent activity and no waiting prompt - idle
-          storage.writeStatus(session.id, "idle", session.tool)
+        const candidate = deriveLocalSessionStatus(status, isActive)
+        const next = this.stabilizeLocalWaitingStatus(session.id, session.status, candidate)
+        storage.writeStatus(session.id, next, session.tool)
 
+        if (next === "idle") {
+          // No recent activity and no waiting prompt - idle
           // Auto-hibernate: if idle too long, hibernate Claude sessions
           if (autoHibernateMs > 0 && session.tool === "claude" && session.toolData?.claudeSessionId) {
             const lastActivity = tmux.getSessionActivity(session.tmuxSession)
@@ -474,7 +516,6 @@ export class SessionManager {
 
   private async saveRecent(options: SessionCreateOptions): Promise<void> {
     const config = getConfig()
-    const recents = [...(config.recents || [])]
 
     const newRecent: Recent = {
       name: options.title || "untitled",
@@ -483,17 +524,7 @@ export class SessionManager {
       groupPath: options.groupPath
     }
 
-    // Dedupe by projectPath + tool
-    const existingIdx = recents.findIndex(r =>
-      r.projectPath === newRecent.projectPath && r.tool === newRecent.tool
-    )
-
-    if (existingIdx >= 0) {
-      recents[existingIdx] = newRecent  // Update name
-    } else {
-      recents.push(newRecent)
-    }
-
+    const recents = addRecent(config.recents || [], newRecent)
     await saveConfig({ ...config, recents })
   }
 
@@ -701,6 +732,43 @@ export class SessionManager {
     storage.updateSessionField(sessionId, "last_accessed", Date.now())
   }
 
+  async confirmWaiting(sessionId: string, message: string): Promise<void> {
+    const storage = getStorage()
+    const before = storage.getSession(sessionId)
+    await this.sendMessage(sessionId, message)
+    if (before?.status === "waiting") {
+      storage.writeStatus(sessionId, "running", before.tool)
+      storage.touch()
+    }
+  }
+
+  async confirm(sessionId: string): Promise<void> {
+    const storage = getStorage()
+    const session = storage.getSession(sessionId)
+
+    if (!session?.tmuxSession) {
+      throw new Error(`Session not found or not running: ${sessionId}`)
+    }
+
+    await tmux.sendKeys(session.tmuxSession, "")
+    storage.setAcknowledged(sessionId, true)
+    storage.updateSessionField(sessionId, "last_accessed", Date.now())
+    storage.touch()
+  }
+
+  async interrupt(sessionId: string): Promise<void> {
+    const storage = getStorage()
+    const session = storage.getSession(sessionId)
+
+    if (!session?.tmuxSession) {
+      throw new Error(`Session not found or not running: ${sessionId}`)
+    }
+
+    await tmux.sendEscapeTwice(session.tmuxSession)
+    storage.updateSessionField(sessionId, "last_accessed", Date.now())
+    storage.touch()
+  }
+
   async getOutput(sessionId: string, lines = 100): Promise<string> {
     const storage = getStorage()
     const session = storage.getSession(sessionId)
@@ -718,12 +786,47 @@ export class SessionManager {
       }
       return await tmux.capturePane(session.tmuxSession, {
         startLine: -lines,
-        endLine: -1,
         escape: true,
         join: true
       })
     } catch {
       return ""
+    }
+  }
+
+  async getOutputPage(
+    sessionId: string,
+    options: TranscriptPageOptions = {}
+  ): Promise<{ text: string; lines: string[]; nextBefore: number; hasMore: boolean; total: number }> {
+    const storage = getStorage()
+    const session = storage.getSession(sessionId)
+    if (!session?.tmuxSession) {
+      return { text: "", lines: [], nextBefore: 0, hasMore: false, total: 0 }
+    }
+
+    const maxLines = Math.max(1, options.maxLines ?? 1000)
+
+    try {
+      const output = await tmux.capturePane(session.tmuxSession, {
+        startLine: -maxLines,
+        join: true
+      })
+      const rawLines = output.split("\n")
+
+      while (rawLines.length > 0 && rawLines[rawLines.length - 1]?.trim() === "") {
+        rawLines.pop()
+      }
+
+      const page = paginateTranscript(rawLines, options)
+      return {
+        text: page.lines.join("\n"),
+        lines: page.lines,
+        nextBefore: page.nextBefore,
+        hasMore: page.hasMore,
+        total: page.total
+      }
+    } catch {
+      return { text: "", lines: [], nextBefore: 0, hasMore: false, total: 0 }
     }
   }
 
@@ -752,9 +855,18 @@ export class SessionManager {
     return getStorage().getSession(sessionId)
   }
 
-  updateTitle(sessionId: string, title: string): void {
+  async updateTitle(sessionId: string, title: string): Promise<void> {
     const storage = getStorage()
+    const session = storage.getSession(sessionId)
+
+    // Update title in storage
     storage.updateSessionField(sessionId, "title", title)
+
+    // Also rename tmux window to show the new title (keep session name for internal tracking)
+    if (session?.tmuxSession) {
+      await tmux.renameWindow(session.tmuxSession, title)
+    }
+
     storage.touch()
   }
 
