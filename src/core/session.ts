@@ -45,6 +45,8 @@ function generateTitle(): string {
 }
 
 const LOCAL_WAITING_EXIT_GRACE_POLLS = 2
+const REMOTE_WAITING_EXIT_GRACE_POLLS = 2
+const REMOTE_STOP_GRACE_POLLS = 3
 
 function deriveLocalSessionStatus(status: tmux.ToolStatus, isActive: boolean): SessionStatus {
   if (status.isWaiting) return "waiting"
@@ -71,6 +73,54 @@ function stabilizeWaitingTransition(
   return { next: candidate, polls: 0 }
 }
 
+export function deriveRemoteSessionStatus(
+  status: tmux.ToolStatus
+): SessionStatus {
+  if (status.isWaiting) return "waiting"
+  if (status.hasError) return "error"
+  if (status.isBusy) return "running"
+  return "idle"
+}
+
+export function stabilizeRemoteWaitingTransition(
+  previous: SessionStatus,
+  candidate: SessionStatus,
+  polls: number,
+  gracePolls = REMOTE_WAITING_EXIT_GRACE_POLLS
+): { next: SessionStatus; polls: number } {
+  if (candidate === "waiting") {
+    return { next: "waiting", polls: 0 }
+  }
+  if (previous === "waiting" && (candidate === "idle" || candidate === "running")) {
+    const nextPolls = polls + 1
+    if (nextPolls < gracePolls) {
+      return { next: "waiting", polls: nextPolls }
+    }
+  }
+  return { next: candidate, polls: 0 }
+}
+
+export function stabilizeRemoteStoppedTransition(
+  previous: SessionStatus,
+  candidate: SessionStatus,
+  polls: number,
+  gracePolls = REMOTE_STOP_GRACE_POLLS
+): { next: SessionStatus; polls: number } {
+  if (candidate !== "stopped") {
+    return { next: candidate, polls: 0 }
+  }
+
+  if (previous === "stopped") {
+    return { next: "stopped", polls: gracePolls }
+  }
+
+  const nextPolls = polls + 1
+  if (nextPolls < gracePolls) {
+    return { next: previous, polls: nextPolls }
+  }
+
+  return { next: "stopped", polls: 0 }
+}
 export class SessionManager {
   private refreshInterval: NodeJS.Timeout | null = null
   private refreshInFlight = false
@@ -93,6 +143,8 @@ export class SessionManager {
   private remoteSessionCaches = new Map<string, Set<string>>() // host -> session names
   private reconnectingHosts = new Set<string>() // hosts with in-progress reconnect
   private refreshingHosts = new Set<string>()   // hosts with in-progress refresh cycle
+  private remoteWaitingExitPolls = new Map<string, number>() // sessionId -> consecutive non-waiting polls
+  private remoteStoppedPolls = new Map<string, number>() // sessionId -> consecutive stopped candidates
 
   private executorCache = new Map<string, TmuxExecutor>()
 
@@ -113,6 +165,32 @@ export class SessionManager {
       if (name) names.add(name)
     }
     this.remoteSessionCaches.set(host, names)
+  }
+
+  private stabilizeRemoteWaitingStatus(
+    sessionId: string,
+    previous: SessionStatus,
+    candidate: SessionStatus
+  ): SessionStatus {
+    // Keep remote waiting state for a short grace window to avoid status flapping
+    // caused by transient capture noise or partial TUI frames.
+    const currentPolls = this.remoteWaitingExitPolls.get(sessionId) || 0
+    const resolved = stabilizeRemoteWaitingTransition(previous, candidate, currentPolls)
+    if (resolved.polls > 0) this.remoteWaitingExitPolls.set(sessionId, resolved.polls)
+    else this.remoteWaitingExitPolls.delete(sessionId)
+    return resolved.next
+  }
+
+  private stabilizeRemoteStoppedStatus(
+    sessionId: string,
+    previous: SessionStatus,
+    candidate: SessionStatus
+  ): SessionStatus {
+    const currentPolls = this.remoteStoppedPolls.get(sessionId) || 0
+    const resolved = stabilizeRemoteStoppedTransition(previous, candidate, currentPolls)
+    if (resolved.polls > 0) this.remoteStoppedPolls.set(sessionId, resolved.polls)
+    else this.remoteStoppedPolls.delete(sessionId)
+    return resolved.next
   }
 
   remoteSessionExists(host: string, name: string): boolean {
@@ -277,7 +355,17 @@ export class SessionManager {
           if (session.status === "hibernated") continue
 
           if (!this.remoteSessionExists(host, session.tmuxSession)) {
-            storage.writeStatus(session.id, "stopped", session.tool)
+            // list-windows can be stale or partial under weak networks.
+            // Confirm with has-session before proposing "stopped".
+            let candidate: SessionStatus = "stopped"
+            try {
+              await executor.exec(["has-session", "-t", session.tmuxSession])
+              candidate = session.status
+            } catch {
+              // keep stopped candidate
+            }
+            const stabilized = this.stabilizeRemoteStoppedStatus(session.id, session.status, candidate)
+            storage.writeStatus(session.id, stabilized, session.tool)
             continue
           }
 
@@ -286,16 +374,10 @@ export class SessionManager {
               "capture-pane", "-t", session.tmuxSession, "-p", "-S", "-100"
             ])
             const status = tmux.parseToolStatus(output, session.tool)
-
-            if (status.isWaiting) {
-              storage.writeStatus(session.id, "waiting", session.tool)
-            } else if (status.hasError) {
-              storage.writeStatus(session.id, "error", session.tool)
-            } else if (status.isBusy) {
-              storage.writeStatus(session.id, "running", session.tool)
-            } else {
-              storage.writeStatus(session.id, "idle", session.tool)
-            }
+            const candidate = deriveRemoteSessionStatus(status)
+            const waitingStable = this.stabilizeRemoteWaitingStatus(session.id, session.status, candidate)
+            const next = this.stabilizeRemoteStoppedStatus(session.id, session.status, waitingStable)
+            storage.writeStatus(session.id, next, session.tool)
           } catch (err) {
             log("capture-pane failed for session:", session.id, "host:", host, err)
             // Don't overwrite status — preserve current status on transient failure
