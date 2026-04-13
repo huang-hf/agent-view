@@ -15,6 +15,7 @@ import os from "os"
 import { buildForkCommand, buildClaudeCommand, copySessionToProject, sessionFileExists } from "./claude"
 import { getConfig, saveConfig } from "./config"
 import { addRecent } from "./recents"
+import { paginateTranscript, type TranscriptPageOptions } from "./transcript"
 
 const logFile = path.join(os.homedir(), ".agent-orchestrator", "debug.log")
 function log(...args: unknown[]) {
@@ -608,6 +609,33 @@ export class SessionManager {
     storage.updateSessionField(sessionId, "last_accessed", Date.now())
   }
 
+  async confirm(sessionId: string): Promise<void> {
+    const storage = getStorage()
+    const session = storage.getSession(sessionId)
+
+    if (!session?.tmuxSession) {
+      throw new Error(`Session not found or not running: ${sessionId}`)
+    }
+
+    await tmux.sendKeys(session.tmuxSession, "")
+    storage.setAcknowledged(sessionId, true)
+    storage.updateSessionField(sessionId, "last_accessed", Date.now())
+    storage.touch()
+  }
+
+  async interrupt(sessionId: string): Promise<void> {
+    const storage = getStorage()
+    const session = storage.getSession(sessionId)
+
+    if (!session?.tmuxSession) {
+      throw new Error(`Session not found or not running: ${sessionId}`)
+    }
+
+    await tmux.sendEscapeTwice(session.tmuxSession)
+    storage.updateSessionField(sessionId, "last_accessed", Date.now())
+    storage.touch()
+  }
+
   async getOutput(sessionId: string, lines = 100): Promise<string> {
     const storage = getStorage()
     const session = storage.getSession(sessionId)
@@ -619,12 +647,47 @@ export class SessionManager {
     try {
       return await tmux.capturePane(session.tmuxSession, {
         startLine: -lines,
-        endLine: -1,
         escape: true,
         join: true
       })
     } catch {
       return ""
+    }
+  }
+
+  async getOutputPage(
+    sessionId: string,
+    options: TranscriptPageOptions = {}
+  ): Promise<{ text: string; lines: string[]; nextBefore: number; hasMore: boolean; total: number }> {
+    const storage = getStorage()
+    const session = storage.getSession(sessionId)
+    if (!session?.tmuxSession) {
+      return { text: "", lines: [], nextBefore: 0, hasMore: false, total: 0 }
+    }
+
+    const maxLines = Math.max(1, options.maxLines ?? 1000)
+
+    try {
+      const output = await tmux.capturePane(session.tmuxSession, {
+        startLine: -maxLines,
+        join: true
+      })
+      const rawLines = output.split("\n")
+
+      while (rawLines.length > 0 && rawLines[rawLines.length - 1]?.trim() === "") {
+        rawLines.pop()
+      }
+
+      const page = paginateTranscript(rawLines, options)
+      return {
+        text: page.lines.join("\n"),
+        lines: page.lines,
+        nextBefore: page.nextBefore,
+        hasMore: page.hasMore,
+        total: page.total
+      }
+    } catch {
+      return { text: "", lines: [], nextBefore: 0, hasMore: false, total: 0 }
     }
   }
 

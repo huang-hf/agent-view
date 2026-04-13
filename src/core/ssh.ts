@@ -221,6 +221,22 @@ export class SSHRunner {
     await this.run(["--stop", sessionId])
   }
 
+  async send(sessionId: string, message: string): Promise<void> {
+    await this.run(["--send", sessionId, message])
+  }
+
+  async confirm(sessionId: string): Promise<void> {
+    await this.run(["--confirm", sessionId])
+  }
+
+  async interrupt(sessionId: string): Promise<void> {
+    await this.run(["--interrupt", sessionId])
+  }
+
+  async output(sessionId: string, lines = 200): Promise<string> {
+    return await this.run(["--output", sessionId, "--lines", String(lines)])
+  }
+
   /**
    * Restart a remote session
    */

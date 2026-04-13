@@ -149,6 +149,41 @@ export class RemoteManager {
     this.clearCache()
   }
 
+  async sendMessage(session: RemoteSession, message: string): Promise<void> {
+    const runner = this.getRunner(session.remoteName)
+    if (!runner) {
+      throw new Error(`Remote "${session.remoteName}" not found`)
+    }
+    await runner.send(session.id, message)
+    this.clearCache()
+  }
+
+  async confirmSession(session: RemoteSession): Promise<void> {
+    const runner = this.getRunner(session.remoteName)
+    if (!runner) {
+      throw new Error(`Remote "${session.remoteName}" not found`)
+    }
+    await runner.confirm(session.id)
+    this.clearCache()
+  }
+
+  async interruptSession(session: RemoteSession): Promise<void> {
+    const runner = this.getRunner(session.remoteName)
+    if (!runner) {
+      throw new Error(`Remote "${session.remoteName}" not found`)
+    }
+    await runner.interrupt(session.id)
+    this.clearCache()
+  }
+
+  async getOutput(session: RemoteSession, lines = 200): Promise<string> {
+    const runner = this.getRunner(session.remoteName)
+    if (!runner) {
+      throw new Error(`Remote "${session.remoteName}" not found`)
+    }
+    return await runner.output(session.id, lines)
+  }
+
   /**
    * Restart a remote session
    */

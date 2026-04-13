@@ -357,6 +357,74 @@ export async function cmdSend(id: string, message: string): Promise<void> {
   console.log(`Sent to ${session.title}: ${message.length > 80 ? message.slice(0, 80) + "..." : message}`)
 }
 
+export async function cmdConfirm(id: string): Promise<void> {
+  const resolvedId = resolveSessionId(id)
+  if (!resolvedId) {
+    process.stderr.write(`Error: Session '${id}' not found\n`)
+    process.exit(3)
+  }
+
+  const session = getStorage().getSession(resolvedId)
+  if (!session) {
+    process.stderr.write(`Error: Session '${id}' not found\n`)
+    process.exit(3)
+  }
+
+  if (!session.tmuxSession) {
+    process.stderr.write(`Error: Session '${session.title}' has no tmux session\n`)
+    process.exit(1)
+  }
+
+  if (session.status === "stopped" || session.status === "hibernated") {
+    process.stderr.write(`Error: Session '${session.title}' is ${session.status}. Restart it first.\n`)
+    process.exit(1)
+  }
+
+  const manager = new SessionManager()
+  await manager.confirm(resolvedId)
+  console.log(`Confirmed session: ${session.title}`)
+}
+
+export async function cmdInterrupt(id: string): Promise<void> {
+  const resolvedId = resolveSessionId(id)
+  if (!resolvedId) {
+    process.stderr.write(`Error: Session '${id}' not found\n`)
+    process.exit(3)
+  }
+
+  const session = getStorage().getSession(resolvedId)
+  if (!session) {
+    process.stderr.write(`Error: Session '${id}' not found\n`)
+    process.exit(3)
+  }
+
+  if (!session.tmuxSession) {
+    process.stderr.write(`Error: Session '${session.title}' has no tmux session\n`)
+    process.exit(1)
+  }
+
+  if (session.status === "stopped" || session.status === "hibernated") {
+    process.stderr.write(`Error: Session '${session.title}' is ${session.status}. Restart it first.\n`)
+    process.exit(1)
+  }
+
+  const manager = new SessionManager()
+  await manager.interrupt(resolvedId)
+  console.log(`Interrupted session: ${session.title} (Esc Esc)`)
+}
+
+export async function cmdOutput(id: string, lines: number): Promise<void> {
+  const resolvedId = resolveSessionId(id)
+  if (!resolvedId) {
+    process.stderr.write(`Error: Session '${id}' not found\n`)
+    process.exit(3)
+  }
+
+  const manager = new SessionManager()
+  const output = await manager.getOutput(resolvedId, lines)
+  process.stdout.write(output)
+}
+
 export async function cmdInfo(id: string, json: boolean): Promise<void> {
   const resolvedId = resolveSessionId(id)
   if (!resolvedId) {

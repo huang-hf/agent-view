@@ -35,6 +35,7 @@ When working with AI coding agents, you often need to run multiple agents on dif
 - **Multi-Agent Dashboard** - View all your AI coding assistant sessions at a glance with real-time status indicators
 - **Smart Notifications** - Get notified when an agent finishes a task or needs your input, so you can context-switch efficiently
 - **Session Management** - Create, stop, restart, and delete coding agent sessions with keyboard shortcuts
+- **Mobile Web UI** - Focus-first web client for phone usage with group/session switcher and remote support
 - **Git Worktree Integration** - Automatically create isolated git worktrees for each agent session, keeping your branches clean
 - **Tool Agnostic** - Works as a Claude Code manager, Gemini CLI orchestrator, OpenCode dashboard, or with any custom AI tool
 - **Keyboard-First** - Fully navigable terminal UI with keyboard shortcuts for maximum productivity
@@ -86,6 +87,43 @@ agent-view
 # or use the short alias
 av
 ```
+
+### Web UI (Mobile + Remote)
+
+Start the web server:
+
+```bash
+# Local only
+av --web --host 127.0.0.1 --port 4317
+
+# Expose on LAN/Tailscale
+av --web --host 0.0.0.0 --port 4317
+```
+
+Then open `http://<host>:4317`.
+
+#### Web UI highlights
+
+- Focus-first single-session view optimized for phone usage
+- Top switcher with two-step `Group -> Session` navigation
+- Unified local + remote sessions in one UI
+- Inbox for waiting/error sessions
+- Paged transcript browsing (latest 1000 lines, scroll up to load older)
+- Quick actions:
+  - `Quick Confirm` (send Enter)
+  - `Interrupt (Esc Esc)` (send Escape twice)
+- Notifications with Service Worker support (`Enable Notifications` + `Test Notification`)
+
+#### Secure phone access with Tailscale
+
+If you already use Tailscale, you can expose the local web UI over your tailnet:
+
+```bash
+tailscale serve --bg 4317
+tailscale serve status
+```
+
+This gives you a tailnet-only HTTPS URL such as `https://<device>.<tailnet>.ts.net/`.
 
 ### Keyboard Shortcuts
 

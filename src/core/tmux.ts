@@ -288,6 +288,13 @@ export async function sendRawKeys(name: string, keys: string): Promise<void> {
   await execAsync(tmuxCmd(`send-keys -t "${name}" "${keys}"`))
 }
 
+/**
+ * Send Esc Esc to interrupt tools that use Escape for cancellation.
+ */
+export async function sendEscapeTwice(name: string): Promise<void> {
+  await execFileAsync("tmux", tmuxSpawnArgs("send-keys", "-t", name, "Escape", "Escape"))
+}
+
 export async function capturePane(
   name: string,
   options: {
@@ -445,7 +452,6 @@ const SPINNER_CHARS = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "
 const CLAUDE_WAITING_PATTERNS = [
   // Permission prompts with numbered options (blocked on user decision)
   /Do you want to proceed\?/i,
-  /\d\.\s*Yes\b/i,  // "1. Yes" pattern in selection UI
   /Esc to cancel.*Tab to amend/i,  // Permission prompt footer
   // Selection UI (blocked on user selection)
   /Enter to select.*to navigate/i,
@@ -525,7 +531,12 @@ export function parseToolStatus(output: string, tool?: string): ToolStatus {
       isBusy = CLAUDE_BUSY_PATTERNS.some(p => p.test(lastLines)) || hasSpinner(lastFewLines)
 
       // Check for waiting indicators (needs user input)
-      isWaiting = CLAUDE_WAITING_PATTERNS.some(p => p.test(lastLines))
+      const hasBaseWaitingCue = CLAUDE_WAITING_PATTERNS.some(p => p.test(lastLines))
+      const hasNumberedYes = /\b1\.\s*Yes\b/i.test(lastLines)
+      const hasPromptContext = /Do you want to proceed\?/i.test(lastLines)
+        || /Esc to cancel.*Tab to amend/i.test(lastLines)
+        || /Enter to select.*to navigate/i.test(lastLines)
+      isWaiting = hasBaseWaitingCue || (hasNumberedYes && hasPromptContext)
     }
     // If Claude has exited, both isBusy and isWaiting stay false -> will become idle
   } else {

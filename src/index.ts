@@ -9,7 +9,7 @@ import pkg from "../package.json"
 
 async function executeHeadlessCommand(command: CLICommand): Promise<void> {
   // Lazy import to avoid loading TUI dependencies for headless commands
-  const { cmdNew, cmdList, cmdDelete, cmdStop, cmdRestart, cmdAttach, cmdStatus, cmdInfo, cmdSend, cmdHibernate, cmdWake, cmdAutoHibernate } = await import("./cli/commands")
+  const { cmdNew, cmdList, cmdDelete, cmdStop, cmdRestart, cmdAttach, cmdStatus, cmdInfo, cmdSend, cmdConfirm, cmdInterrupt, cmdOutput, cmdHibernate, cmdWake, cmdAutoHibernate } = await import("./cli/commands")
 
   switch (command.type) {
     case "new":
@@ -38,6 +38,15 @@ async function executeHeadlessCommand(command: CLICommand): Promise<void> {
       break
     case "send":
       await cmdSend(command.id, command.message)
+      break
+    case "confirm":
+      await cmdConfirm(command.id)
+      break
+    case "interrupt":
+      await cmdInterrupt(command.id)
+      break
+    case "output":
+      await cmdOutput(command.id, command.lines)
       break
     case "hibernate":
       await cmdHibernate(command.id)
@@ -77,6 +86,17 @@ async function main() {
   if (command.type === "tui") {
     try {
       await launchTUI(command.mode)
+    } catch (error) {
+      console.error("Fatal error:", error)
+      process.exit(1)
+    }
+    return
+  }
+
+  if (command.type === "web") {
+    try {
+      const { startWebServer } = await import("./web/server")
+      await startWebServer({ host: command.host, port: command.port })
     } catch (error) {
       console.error("Fatal error:", error)
       process.exit(1)
