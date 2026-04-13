@@ -42,7 +42,7 @@
       box-shadow: 0 8px 28px rgba(0,0,0,0.28);
     }
 
-    .row { display: flex; align-items: center; gap: 8px; }
+    .row { display: flex; align-items: center; gap: 8px; min-width: 0; }
     .between { justify-content: space-between; }
     .stack { display: grid; gap: 8px; }
 
@@ -79,6 +79,8 @@
 
     .switcher-btn {
       max-width: 70vw;
+      min-width: 0;
+      flex: 1 1 220px;
       text-align: left;
       white-space: nowrap;
       overflow: hidden;
@@ -200,16 +202,75 @@
       background: #0e1a2a;
       margin-top: 8px;
     }
+
+    .topbar {
+      flex-wrap: wrap;
+      align-items: flex-start;
+    }
+
+    .topbar-actions {
+      margin-left: auto;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    #session-title {
+      min-width: 0;
+      max-width: 70vw;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      display: inline-block;
+    }
+
+    #session-meta {
+      overflow-wrap: anywhere;
+    }
+
+    @media (max-width: 760px) {
+      .app {
+        padding: 10px 10px 16px;
+        gap: 10px;
+      }
+
+      .card {
+        padding: 10px;
+      }
+
+      .topbar-actions {
+        width: 100%;
+        margin-left: 0;
+        justify-content: stretch;
+      }
+
+      .topbar-actions button {
+        flex: 1 1 calc(50% - 8px);
+      }
+
+      .switcher-btn {
+        max-width: 100%;
+        flex-basis: 100%;
+      }
+
+      .between {
+        flex-wrap: wrap;
+        row-gap: 8px;
+      }
+
+      #session-title {
+        max-width: 100%;
+      }
+    }
   </style>
 </head>
 <body>
   <main class="app">
-    <section class="card row between">
+    <section class="card row between topbar">
       <div>
         <h1>Agent View Mobile</h1>
         <div class="hint">Focus-first view with group switcher</div>
       </div>
-      <div class="row">
+      <div class="row topbar-actions">
         <button id="btn-switcher" class="switcher-btn">Select Session</button>
         <button id="btn-notify">Enable Notifications</button>
         <button id="btn-test-notify">Test Notification</button>
