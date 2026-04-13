@@ -185,6 +185,7 @@ bin git:(main) ❯`
     const status = parseToolStatus(output, "claude")
     expect(status.isWaiting).toBe(false)
     expect(status.isBusy).toBe(false)
+    expect(status.hasExited).toBe(true)
   })
 
   test("detects do you want to pattern", () => {

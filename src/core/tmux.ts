@@ -415,6 +415,7 @@ export interface ToolStatus {
   isWaiting: boolean
   isBusy: boolean
   hasError: boolean
+  hasExited: boolean
 }
 
 export function stripAnsi(text: string): string {
@@ -552,7 +553,8 @@ export function parseToolStatus(output: string, tool?: string): ToolStatus {
     isActive: false, // Determined by activity timestamp
     isWaiting,
     isBusy,
-    hasError
+    hasError,
+    hasExited
   }
 }
 
