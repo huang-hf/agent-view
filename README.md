@@ -88,6 +88,17 @@ agent-view
 av
 ```
 
+### Run Headless Notify Watcher
+
+Use `av -r` to run a headless watcher that sends webhook notifications when a session enters `waiting` status.
+
+```bash
+av -r
+```
+
+For QQ Official Bot forwarding, a minimal relay service is included at `relay/` in this repository.
+See [`relay/README.md`](relay/README.md) for setup.
+
 ### Keyboard Shortcuts
 
 **Dashboard:**
@@ -181,6 +192,21 @@ Create `~/.agent-view/config.json` to customize defaults:
 ```json
 {
   "defaultTool": "claude",
+  "notify": {
+    "enabled": true,
+    "webhookUrl": "https://your-relay.example.com/agent-view/events",
+    "webhookTokenEnv": "AV_NOTIFY_TOKEN",
+    "cooldownSeconds": 300,
+    "tokenTtlSeconds": 300,
+    "pollIntervalMs": 500,
+    "actionServer": {
+      "enabled": true,
+      "host": "127.0.0.1",
+      "port": 5177,
+      "path": "/notify/action",
+      "secretEnv": "AV_NOTIFY_ACTION_SECRET"
+    }
+  },
   "worktree": {
     "defaultBaseBranch": "main",
     "syncRemoteBranch": "origin/main"
@@ -203,6 +229,16 @@ Create `~/.agent-view/config.json` to customize defaults:
   ]
 }
 ```
+
+When `actionServer.enabled` is true, your relay can call back:
+
+- `POST http://127.0.0.1:5177/notify/action`
+- Headers: `x-av-secret: <value from AV_NOTIFY_ACTION_SECRET>`
+- Body: `{ "token": "<actionToken>", "action": "yes" | "no" }`
+
+Behavior:
+- `yes`: sends `yes` + Enter to the target waiting session
+- `no`: ignores this event (no input sent to the session)
 
 **Shortcuts** allow quick session creation from pre-configured templates. Press `s` to open the shortcuts dialog, or use direct keybinds (e.g., `\1` for `<leader>1`).
 

@@ -25,6 +25,25 @@ export interface AppConfig {
   autoHibernatePrompted?: boolean // true = user has seen the prompt
   remoteHosts?: RemoteHost[]
   copyClaudeDir?: boolean  // true = copy .claude dir to worktree (default true)
+  notify?: NotifyConfig
+}
+
+export interface NotifyActionServerConfig {
+  enabled?: boolean
+  host?: string
+  port?: number
+  path?: string
+  secretEnv?: string
+}
+
+export interface NotifyConfig {
+  enabled?: boolean
+  webhookUrl?: string
+  webhookTokenEnv?: string
+  cooldownSeconds?: number
+  tokenTtlSeconds?: number
+  pollIntervalMs?: number
+  actionServer?: NotifyActionServerConfig
 }
 
 const CONFIG_DIR = path.join(os.homedir(), ".agent-view")
@@ -39,7 +58,20 @@ const DEFAULT_CONFIG: AppConfig = {
   },
   defaultGroup: "default",
   shortcuts: [],
-  recents: []
+  recents: [],
+  notify: {
+    enabled: false,
+    cooldownSeconds: 300,
+    tokenTtlSeconds: 300,
+    pollIntervalMs: 500,
+    actionServer: {
+      enabled: false,
+      host: "127.0.0.1",
+      port: 5177,
+      path: "/notify/action",
+      secretEnv: "AV_NOTIFY_ACTION_SECRET"
+    }
+  }
 }
 
 // Cached config for sync access

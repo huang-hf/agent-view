@@ -19,6 +19,7 @@ export type CLICommand =
   | { type: "hibernate"; id: string }
   | { type: "wake"; id: string }
   | { type: "auto-hibernate"; minutes?: number }
+  | { type: "run" }
 
 export interface NewOptions {
   path: string
@@ -200,6 +201,10 @@ export function parseArgs(argv: string[]): CLICommand {
     return { type: "auto-hibernate" }
   }
 
+  if (getFlag(args, "--run") || getFlag(args, "-r")) {
+    return { type: "run" }
+  }
+
   // Fallback: TUI mode with optional --light
   const mode = getFlag(args, "--light") ? "light" : "dark"
   return { type: "tui", mode }
@@ -223,6 +228,7 @@ Usage:
   av --hibernate <id>             Hibernate a session (Claude-only)
   av --wake <id>                  Resume a hibernated session
   av --auto-hibernate [minutes]   Set/show auto-hibernate timeout (0 to disable)
+  av --run, -r                    Start headless watcher (notify mode via config)
 
 TUI Options:
   --light                         Use light mode theme
