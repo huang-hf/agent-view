@@ -42,10 +42,51 @@ function generateTitle(): string {
   return `${adj}-${noun}`
 }
 
+const LOCAL_WAITING_EXIT_GRACE_POLLS = 2
+
+function deriveLocalSessionStatus(status: tmux.ToolStatus, isActive: boolean): SessionStatus {
+  if (status.isWaiting) return "waiting"
+  if (status.hasError) return "error"
+  if (status.isBusy || isActive) return "running"
+  return "idle"
+}
+
+function stabilizeWaitingTransition(
+  previous: SessionStatus,
+  candidate: SessionStatus,
+  polls: number,
+  gracePolls = LOCAL_WAITING_EXIT_GRACE_POLLS
+): { next: SessionStatus; polls: number } {
+  if (candidate === "waiting") {
+    return { next: "waiting", polls: 0 }
+  }
+  if (previous === "waiting" && (candidate === "idle" || candidate === "running")) {
+    const nextPolls = polls + 1
+    if (nextPolls < gracePolls) {
+      return { next: "waiting", polls: nextPolls }
+    }
+  }
+  return { next: candidate, polls: 0 }
+}
+
 export class SessionManager {
   private refreshInterval: NodeJS.Timeout | null = null
+  private refreshInFlight = false
   private memoryMap = new Map<string, number>() // sessionId → KB
   private _recentAutoHibernated: { id: string; title: string; idleMinutes: number }[] = []
+  private localWaitingExitPolls = new Map<string, number>() // sessionId -> consecutive non-waiting polls
+
+  private stabilizeLocalWaitingStatus(
+    sessionId: string,
+    previous: SessionStatus,
+    candidate: SessionStatus
+  ): SessionStatus {
+    const currentPolls = this.localWaitingExitPolls.get(sessionId) || 0
+    const resolved = stabilizeWaitingTransition(previous, candidate, currentPolls)
+    if (resolved.polls > 0) this.localWaitingExitPolls.set(sessionId, resolved.polls)
+    else this.localWaitingExitPolls.delete(sessionId)
+    return resolved.next
+  }
 
   getMemoryKB(sessionId: string): number | undefined {
     return this.memoryMap.get(sessionId)
@@ -61,7 +102,13 @@ export class SessionManager {
     if (this.refreshInterval) return
 
     this.refreshInterval = setInterval(async () => {
-      await this.refreshStatuses()
+      if (this.refreshInFlight) return
+      this.refreshInFlight = true
+      try {
+        await this.refreshStatuses()
+      } finally {
+        this.refreshInFlight = false
+      }
     }, intervalMs)
   }
 
@@ -70,6 +117,7 @@ export class SessionManager {
       clearInterval(this.refreshInterval)
       this.refreshInterval = null
     }
+    this.refreshInFlight = false
   }
 
   async refreshStatuses(): Promise<void> {
@@ -106,19 +154,12 @@ export class SessionManager {
         })
         const status = tmux.parseToolStatus(output, session.tool)
 
-        if (status.isWaiting) {
-          // Agent is waiting for user input (permission prompt, question, etc.)
-          storage.writeStatus(session.id, "waiting", session.tool)
-        } else if (status.hasError) {
-          // Agent encountered an error
-          storage.writeStatus(session.id, "error", session.tool)
-        } else if (status.isBusy || isActive) {
-          // Agent is actively working (spinner visible, recent output, etc.)
-          storage.writeStatus(session.id, "running", session.tool)
-        } else {
-          // No recent activity and no waiting prompt - idle
-          storage.writeStatus(session.id, "idle", session.tool)
+        const candidate = deriveLocalSessionStatus(status, isActive)
+        const next = this.stabilizeLocalWaitingStatus(session.id, session.status, candidate)
+        storage.writeStatus(session.id, next, session.tool)
 
+        if (next === "idle") {
+          // No recent activity and no waiting prompt - idle
           // Auto-hibernate: if idle too long, hibernate Claude sessions
           if (autoHibernateMs > 0 && session.tool === "claude" && session.toolData?.claudeSessionId) {
             const lastActivity = tmux.getSessionActivity(session.tmuxSession)
@@ -607,6 +648,16 @@ export class SessionManager {
 
     await tmux.sendKeys(session.tmuxSession, message)
     storage.updateSessionField(sessionId, "last_accessed", Date.now())
+  }
+
+  async confirmWaiting(sessionId: string, message: string): Promise<void> {
+    const storage = getStorage()
+    const before = storage.getSession(sessionId)
+    await this.sendMessage(sessionId, message)
+    if (before?.status === "waiting") {
+      storage.writeStatus(sessionId, "running", before.tool)
+      storage.touch()
+    }
   }
 
   async confirm(sessionId: string): Promise<void> {

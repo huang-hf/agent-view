@@ -27,7 +27,7 @@ import { executeShortcut, getShortcutGroupPath } from "@/core/shortcut"
 import { useKeybind } from "@tui/context/keybind"
 import { useKV } from "@tui/context/kv"
 import { DialogUpdate } from "@tui/component/dialog-update"
-import { attachSessionSync, capturePane, wasCommandPaletteRequested, wasSessionListRequested, sendKeys } from "@/core/tmux"
+import { attachSessionSync, capturePane, wasCommandPaletteRequested, wasSessionListRequested } from "@/core/tmux"
 import { useCommandDialog } from "@tui/component/dialog-command"
 import type { Session, Group, RemoteSession } from "@/core/types"
 import { isRemoteSession } from "@/core/types"
@@ -768,7 +768,7 @@ export function Home() {
           return
         }
         if (session.tmuxSession) {
-          sendKeys(session.tmuxSession, "").then(() => {
+          getSessionManager().confirmWaiting(session.id, "").then(() => {
             toast.show({ message: "✓ Confirmed", variant: "success", duration: 1500 })
             sync.refresh()
           }).catch((err) => {
