@@ -517,6 +517,7 @@ const WAITING_PATTERNS = [
   /yes, proceed \(y\)/i,
   /don't ask again for these files/i,
   /tell codex what to do differently/i,
+  /(?:^|\n)\s*[›>]\s*1\.\s*Yes,\s*proceed\s*\(y\)/i
 ]
 
 const ERROR_PATTERNS = [

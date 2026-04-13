@@ -107,6 +107,14 @@ describe("parseToolStatus", () => {
     expect(status.isWaiting).toBe(true)
   })
 
+  test("detects Codex numbered yes proceed prompt", () => {
+    const output = `Approval required
+› 1. Yes, proceed (y)
+  2. No, cancel (n)`
+    const status = parseToolStatus(output, "codex")
+    expect(status.isWaiting).toBe(true)
+  })
+
   test("detects waiting for input", () => {
     const output = "The process is waiting for user input"
     const status = parseToolStatus(output)
