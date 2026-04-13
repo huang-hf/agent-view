@@ -5,7 +5,8 @@
 
 export type CLICommand =
   | { type: "tui"; mode: "light" | "dark" }
-  | { type: "web"; host: string; port: number }
+  | { type: "web"; host: string; port: number; noServe: boolean }
+  | { type: "all"; mode: "light" | "dark"; host: string; port: number; noServe: boolean }
   | { type: "help" }
   | { type: "version" }
   | { type: "new"; options: NewOptions }
@@ -69,14 +70,31 @@ export function parseArgs(argv: string[]): CLICommand {
   }
 
   if (getFlag(args, "--web")) {
-    const host = getFlagValue(args, "--host") ?? "127.0.0.1"
+    const host = getFlagValue(args, "--host") ?? "0.0.0.0"
     const portRaw = getFlagValue(args, "--port")
     const port = portRaw ? parseInt(portRaw, 10) : 4317
     if (isNaN(port) || port < 1 || port > 65535) {
       process.stderr.write("Error: --port must be a valid port number (1-65535)\n")
       process.exit(2)
     }
-    return { type: "web", host, port }
+    return { type: "web", host, port, noServe: getFlag(args, "--no-serve") }
+  }
+
+  if (getFlag(args, "--all")) {
+    const host = getFlagValue(args, "--host") ?? "0.0.0.0"
+    const portRaw = getFlagValue(args, "--port")
+    const port = portRaw ? parseInt(portRaw, 10) : 4317
+    if (isNaN(port) || port < 1 || port > 65535) {
+      process.stderr.write("Error: --port must be a valid port number (1-65535)\n")
+      process.exit(2)
+    }
+    return {
+      type: "all",
+      mode: getFlag(args, "--light") ? "light" : "dark",
+      host,
+      port,
+      noServe: getFlag(args, "--no-serve")
+    }
   }
 
   if (getFlag(args, "--new") || getFlag(args, "-n")) {
@@ -259,7 +277,8 @@ Agent View - Terminal Agent Management
 
 Usage:
   av [options]                    Launch TUI (default)
-  av --web [--host H --port P]    Launch mobile web UI/API server
+  av --web [--host H --port P]    Launch mobile web UI/API server (auto Tailscale Serve)
+  av --all [--host H --port P]    Launch TUI + ensure web backend is running
   av --new [flags]                Create a new session
   av --list [flags]               List sessions
   av --delete <id> [flags]        Delete a session
@@ -281,8 +300,10 @@ TUI Options:
 
 Web Mode:
   --web                           Start web server (mobile-friendly UI + API)
-  --host <addr>                   Bind address (default: 127.0.0.1)
+  --all                           Start TUI and web backend together
+  --host <addr>                   Bind address (default: 0.0.0.0)
   --port <port>                   Bind port (default: 4317)
+  --no-serve                      Skip automatic tailscale serve setup
 
 New Session (--new, -n):
   --path <dir>                    Project path (default: cwd)

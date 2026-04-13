@@ -94,13 +94,18 @@ Start the web server:
 
 ```bash
 # Local only
-av --web --host 127.0.0.1 --port 4317
+av --web --host 127.0.0.1 --port 4317 --no-serve
 
-# Expose on LAN/Tailscale
+# Expose on LAN/Tailscale (auto tailscale serve)
 av --web --host 0.0.0.0 --port 4317
+
+# Start TUI + ensure web backend + tailscale serve
+av --all --host 0.0.0.0 --port 4317
 ```
 
 Then open `http://<host>:4317`.
+
+`av --all` is idempotent for web startup: if the web backend is already running on the target port, it will reuse it instead of restarting.
 
 #### Web UI highlights
 
@@ -124,6 +129,82 @@ tailscale serve status
 ```
 
 This gives you a tailnet-only HTTPS URL such as `https://<device>.<tailnet>.ts.net/`.
+
+### Mobile Access Scenario (Tailscale)
+
+Use this when you want to manage sessions from your phone outside working hours.
+
+#### 1) Prerequisites
+
+- Tailscale is installed and logged in on both PC and phone
+- PC and phone are in the same tailnet
+- `av` is running on your PC
+
+#### 2) Start Agent View Web UI on PC
+
+```bash
+av --all --host 0.0.0.0 --port 4317
+```
+
+This starts TUI and ensures the web backend is running.  
+Why `0.0.0.0`: it allows access from your Tailscale interface (not only localhost).
+
+#### 3) Expose it as HTTPS inside tailnet
+
+`av --web` / `av --all` already try to run `tailscale serve --bg <port>` automatically.
+
+You can still verify manually:
+
+```bash
+tailscale serve status
+```
+
+You should get a URL like:
+
+```text
+https://<device>.<tailnet>.ts.net/
+```
+
+If Serve is not enabled on your tailnet, Tailscale will print an enable link. Open it once, then re-run `tailscale serve --bg 4317`.
+
+#### 4) Open on phone
+
+Open the HTTPS Tailscale URL in your mobile browser (Edge/Chrome/Safari).
+
+- Recommended: use the `https://...ts.net` URL from `tailscale serve status`
+- Not recommended for notifications: `http://<tailscale-ip>:4317`
+
+#### 5) Enable notifications
+
+In Web UI:
+
+1. Tap `Enable Notifications`
+2. Tap `Test Notification`
+
+If permission is granted, you should see a system notification banner.
+
+#### 6) Daily mobile workflow
+
+- Open top switcher -> choose `Group` -> choose `Session`
+- Use `Quick Confirm` to send Enter for waiting prompts
+- Use `Interrupt (Esc Esc)` to interrupt current execution
+- Scroll transcript upward to load older output (latest 1000 lines window)
+
+#### 7) Common issues
+
+- **No notification banner on phone**
+  - Verify site notification permission is `Allow`
+  - Verify system notification permission for browser app is enabled
+  - Use HTTPS Tailscale URL (`https://...ts.net`)
+- **Phone can't open URL**
+  - Check both devices are connected to Tailscale
+  - Verify web UI process is running on PC
+  - Re-check `tailscale serve status`
+- **Need to disable serve**
+
+```bash
+tailscale serve --https=443 off
+```
 
 ### Keyboard Shortcuts
 

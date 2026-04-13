@@ -4,12 +4,22 @@ import { parseArgs } from "./args"
 describe("parseArgs web mode", () => {
   test("parses --web with defaults", () => {
     const result = parseArgs(["node", "av", "--web"])
-    expect(result).toEqual({ type: "web", host: "127.0.0.1", port: 4317 })
+    expect(result).toEqual({ type: "web", host: "0.0.0.0", port: 4317, noServe: false })
   })
 
   test("parses --web with custom host and port", () => {
     const result = parseArgs(["node", "av", "--web", "--host", "0.0.0.0", "--port", "9000"])
-    expect(result).toEqual({ type: "web", host: "0.0.0.0", port: 9000 })
+    expect(result).toEqual({ type: "web", host: "0.0.0.0", port: 9000, noServe: false })
+  })
+
+  test("parses --web --no-serve", () => {
+    const result = parseArgs(["node", "av", "--web", "--no-serve"])
+    expect(result).toEqual({ type: "web", host: "0.0.0.0", port: 4317, noServe: true })
+  })
+
+  test("parses --all with defaults", () => {
+    const result = parseArgs(["node", "av", "--all"])
+    expect(result).toEqual({ type: "all", mode: "dark", host: "0.0.0.0", port: 4317, noServe: false })
   })
 })
 
