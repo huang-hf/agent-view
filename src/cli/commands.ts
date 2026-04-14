@@ -11,8 +11,6 @@ import type { Tool, Session, SessionStatus, ClaudeOptions } from "../core/types"
 import type { NewOptions, ListOptions } from "./args"
 import { existsSync } from "fs"
 import path from "path"
-import { NotifyRuntime, postWaitingEvent } from "../core/notify"
-import { getConfig } from "../core/config"
 
 const VALID_TOOLS = ["claude", "opencode", "gemini", "codex", "custom", "shell"]
 const VALID_STATUSES = ["running", "waiting", "idle", "stopped", "error", "hibernated"]
@@ -359,6 +357,92 @@ export async function cmdSend(id: string, message: string): Promise<void> {
   console.log(`Sent to ${session.title}: ${message.length > 80 ? message.slice(0, 80) + "..." : message}`)
 }
 
+export async function cmdAcknowledge(id: string): Promise<void> {
+  const resolvedId = resolveSessionId(id)
+  if (!resolvedId) {
+    process.stderr.write(`Error: Session '${id}' not found\n`)
+    process.exit(3)
+  }
+
+  const session = getStorage().getSession(resolvedId)
+  if (!session) {
+    process.stderr.write(`Error: Session '${id}' not found\n`)
+    process.exit(3)
+  }
+
+  const manager = new SessionManager()
+  manager.acknowledge(resolvedId)
+  console.log(`Acknowledged session: ${session.title}`)
+}
+
+export async function cmdConfirm(id: string): Promise<void> {
+  const resolvedId = resolveSessionId(id)
+  if (!resolvedId) {
+    process.stderr.write(`Error: Session '${id}' not found\n`)
+    process.exit(3)
+  }
+
+  const session = getStorage().getSession(resolvedId)
+  if (!session) {
+    process.stderr.write(`Error: Session '${id}' not found\n`)
+    process.exit(3)
+  }
+
+  if (!session.tmuxSession) {
+    process.stderr.write(`Error: Session '${session.title}' has no tmux session\n`)
+    process.exit(1)
+  }
+
+  if (session.status === "stopped" || session.status === "hibernated") {
+    process.stderr.write(`Error: Session '${session.title}' is ${session.status}. Restart it first.\n`)
+    process.exit(1)
+  }
+
+  const manager = new SessionManager()
+  await manager.confirm(resolvedId)
+  console.log(`Confirmed session: ${session.title}`)
+}
+
+export async function cmdInterrupt(id: string): Promise<void> {
+  const resolvedId = resolveSessionId(id)
+  if (!resolvedId) {
+    process.stderr.write(`Error: Session '${id}' not found\n`)
+    process.exit(3)
+  }
+
+  const session = getStorage().getSession(resolvedId)
+  if (!session) {
+    process.stderr.write(`Error: Session '${id}' not found\n`)
+    process.exit(3)
+  }
+
+  if (!session.tmuxSession) {
+    process.stderr.write(`Error: Session '${session.title}' has no tmux session\n`)
+    process.exit(1)
+  }
+
+  if (session.status === "stopped" || session.status === "hibernated") {
+    process.stderr.write(`Error: Session '${session.title}' is ${session.status}. Restart it first.\n`)
+    process.exit(1)
+  }
+
+  const manager = new SessionManager()
+  await manager.interrupt(resolvedId)
+  console.log(`Interrupted session: ${session.title} (Esc Esc)`)
+}
+
+export async function cmdOutput(id: string, lines: number): Promise<void> {
+  const resolvedId = resolveSessionId(id)
+  if (!resolvedId) {
+    process.stderr.write(`Error: Session '${id}' not found\n`)
+    process.exit(3)
+  }
+
+  const manager = new SessionManager()
+  const output = await manager.getOutput(resolvedId, lines)
+  process.stdout.write(output)
+}
+
 export async function cmdInfo(id: string, json: boolean): Promise<void> {
   const resolvedId = resolveSessionId(id)
   if (!resolvedId) {
@@ -464,105 +548,5 @@ export async function cmdAutoHibernate(minutes?: number): Promise<void> {
     console.log("Auto-hibernate disabled")
   } else {
     console.log(`Auto-hibernate set to ${minutes} minutes`)
-  }
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms))
-}
-
-export async function cmdRun(): Promise<void> {
-  const { loadConfig } = await import("../core/config")
-  await loadConfig()
-
-  const config = getConfig()
-  const notify = config.notify
-  if (!notify?.enabled) {
-    process.stderr.write("Error: notify.enabled is false in ~/.agent-view/config.json\n")
-    process.exit(2)
-  }
-  if (!notify.webhookUrl) {
-    process.stderr.write("Error: notify.webhookUrl is required in ~/.agent-view/config.json\n")
-    process.exit(2)
-  }
-
-  const manager = new SessionManager()
-  const runtime = new NotifyRuntime({
-    cooldownSeconds: notify.cooldownSeconds ?? 300,
-    tokenTtlSeconds: notify.tokenTtlSeconds ?? 300,
-  })
-
-  const actionPath = notify.actionServer?.path || "/notify/action"
-  const actionHost = notify.actionServer?.host || "127.0.0.1"
-  const actionPort = notify.actionServer?.port || 5177
-  const actionSecret = notify.actionServer?.secretEnv
-    ? process.env[notify.actionServer.secretEnv]
-    : undefined
-
-  let server: ReturnType<typeof Bun.serve> | null = null
-  if (notify.actionServer?.enabled) {
-    server = Bun.serve({
-      hostname: actionHost,
-      port: actionPort,
-      async fetch(req) {
-        if (new URL(req.url).pathname !== actionPath) {
-          return new Response("not found", { status: 404 })
-        }
-        if (req.method !== "POST") {
-          return new Response("method not allowed", { status: 405 })
-        }
-
-        if (actionSecret) {
-          const provided = req.headers.get("x-av-secret") || ""
-          if (provided !== actionSecret) {
-            return Response.json({ ok: false, message: "unauthorized" }, { status: 401 })
-          }
-        }
-
-        let body: { token?: string; action?: "yes" | "no" } = {}
-        try {
-          body = await req.json()
-        } catch {
-          return Response.json({ ok: false, message: "invalid json" }, { status: 400 })
-        }
-        if (!body.token || (body.action !== "yes" && body.action !== "no")) {
-          return Response.json({ ok: false, message: "invalid payload" }, { status: 400 })
-        }
-
-        const result = await runtime.handleAction({
-          token: body.token,
-          action: body.action,
-          sendYes: async (sessionId: string) => {
-            await manager.sendMessage(sessionId, "yes")
-          },
-        })
-        return Response.json(result, { status: result.ok ? 200 : 400 })
-      },
-    })
-  }
-
-  process.stdout.write("Notify watcher started\n")
-  process.stdout.write(`Webhook: ${notify.webhookUrl}\n`)
-  if (server) {
-    process.stdout.write(`Action endpoint: http://${actionHost}:${actionPort}${actionPath}\n`)
-  }
-
-  let running = true
-  const stop = () => {
-    running = false
-    server?.stop()
-  }
-  process.on("SIGINT", stop)
-  process.on("SIGTERM", stop)
-
-  const pollIntervalMs = notify.pollIntervalMs ?? 500
-  while (running) {
-    await manager.refreshStatuses()
-    const sessions = getStorage().loadSessions()
-    const events = runtime.collectWaitingEntries(sessions)
-    for (const event of events) {
-      await postWaitingEvent(notify, event)
-    }
-    await sleep(pollIntervalMs)
   }
 }

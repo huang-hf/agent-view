@@ -1,0 +1,1094 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Agent View Mobile</title>
+  <style>
+    :root {
+      --bg: #081225;
+      --panel: #0f1c35;
+      --panel-soft: #132445;
+      --text: #ecf3ff;
+      --muted: #a8bbdc;
+      --accent: #32d7a2;
+      --warn: #ffcb66;
+      --error: #ff7a8a;
+      --border: #2b3f66;
+      --blue-1: #3b82f6;
+      --blue-2: #60a5fa;
+      --cyan-1: #22d3ee;
+    }
+
+    * { box-sizing: border-box; }
+    html, body {
+      width: 100%;
+      max-width: 100%;
+      overflow-x: hidden;
+      -webkit-text-size-adjust: 100%;
+      text-size-adjust: 100%;
+    }
+
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 16px;
+      color: var(--text);
+      background:
+        radial-gradient(900px 500px at 0% -10%, rgba(59,130,246,0.35) 0%, rgba(59,130,246,0) 55%),
+        radial-gradient(1000px 600px at 100% -20%, rgba(34,211,238,0.24) 0%, rgba(34,211,238,0) 58%),
+        linear-gradient(180deg, #0a1730 0%, var(--bg) 45%, #060d1d 100%);
+      min-height: 100vh;
+    }
+
+    .app {
+      width: 100%;
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 12px 12px 18px;
+      display: grid;
+      gap: 12px;
+      overflow-x: hidden;
+    }
+
+    .card {
+      background:
+        linear-gradient(135deg, rgba(96,165,250,0.12), rgba(50,215,162,0.05) 38%, rgba(255,255,255,0.02) 85%),
+        linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015));
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 12px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+      min-width: 0;
+    }
+
+    .row { display: flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%; }
+    .row > * { min-width: 0; }
+    .between { justify-content: space-between; }
+    .stack { display: grid; gap: 8px; }
+
+    h1 { margin: 0; font-size: 18px; letter-spacing: 0.02em; }
+
+    button {
+      border: 1px solid var(--border);
+      background: var(--panel-soft);
+      color: var(--text);
+      border-radius: 10px;
+      padding: 10px 14px;
+      font-size: 14px;
+      line-height: 1.2;
+      font-weight: 600;
+      min-height: 42px;
+      cursor: pointer;
+      max-width: 100%;
+      touch-action: manipulation;
+    }
+
+    button.primary {
+      border-color: #2c8e63;
+      background: linear-gradient(180deg, #33b57c, #1e7f57);
+    }
+    button.warning {
+      border-color: #8f6920;
+      background: linear-gradient(180deg, #e3b14e, #b47d1a);
+      color: #1d1405;
+      font-weight: 700;
+    }
+    button.danger {
+      border-color: #8b3542;
+      background: linear-gradient(180deg, #dc6578, #b73c4f);
+      color: #fff5f7;
+      font-weight: 700;
+    }
+
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .switcher-btn {
+      max-width: 70vw;
+      min-width: 0;
+      flex: 1 1 220px;
+      text-align: left;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .meta { color: var(--muted); font-size: 12px; }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 3px 8px;
+      font-size: 12px;
+      color: var(--muted);
+      flex-shrink: 0;
+      background: rgba(255,255,255,0.03);
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+      background: #8ea3c7;
+    }
+
+    .status-running .dot { background: var(--accent); }
+    .status-waiting .dot { background: var(--warn); }
+    .status-error .dot { background: var(--error); }
+
+    .status-pill.status-running {
+      border-color: rgba(50,215,162,0.5);
+      background: rgba(50,215,162,0.12);
+      color: #9bf1d2;
+    }
+    .status-pill.status-waiting {
+      border-color: rgba(255,203,102,0.55);
+      background: rgba(255,203,102,0.14);
+      color: #ffe3a7;
+    }
+    .status-pill.status-error {
+      border-color: rgba(255,122,138,0.55);
+      background: rgba(255,122,138,0.14);
+      color: #ffd1d8;
+    }
+
+    .transcript {
+      background:
+        linear-gradient(180deg, rgba(96,165,250,0.06), rgba(96,165,250,0)),
+        #0a1222;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      height: 58vh;
+      overflow: auto;
+      overflow-x: hidden;
+      padding: 10px;
+      font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+      max-width: 100%;
+    }
+
+    .transcript-line {
+      display: block;
+    }
+
+    .transcript-line.is-command {
+      color: #8ec5ff;
+    }
+
+    .transcript-line.is-status-good {
+      color: #91e7be;
+    }
+
+    .transcript-line.is-status-bad {
+      color: #ff9aa7;
+    }
+
+    .transcript-line.is-status-warn {
+      color: #ffd98b;
+    }
+
+    .transcript-line.is-prompt {
+      color: #7dd3fc;
+      font-weight: 700;
+    }
+
+    .transcript-line.is-muted {
+      color: #7f93b6;
+    }
+
+    .transcript-line.is-divider {
+      color: #5f7398;
+    }
+
+    .transcript-line.is-note {
+      color: #c4d7f5;
+      font-style: italic;
+    }
+
+    .input {
+      width: 100%;
+      max-width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: #0c1628;
+      color: var(--text);
+      padding: 10px;
+      font: 16px/1.4 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      min-height: 76px;
+    }
+
+    @media (pointer: coarse) {
+      button {
+        min-height: 46px;
+        font-size: 15px;
+        padding: 12px 14px;
+      }
+
+      .status-pill {
+        font-size: 13px;
+      }
+
+      .hint,
+      .meta {
+        font-size: 13px;
+      }
+    }
+
+    .hint { color: var(--muted); font-size: 12px; }
+
+    .modal {
+      position: fixed;
+      inset: 0;
+      display: none;
+      background: rgba(4, 10, 18, 0.72);
+      z-index: 30;
+    }
+
+    .modal.open { display: block; }
+
+    .modal-panel {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 8px;
+      bottom: auto;
+      max-height: calc(100vh - 16px);
+      overflow: auto;
+      background:
+        linear-gradient(180deg, rgba(96,165,250,0.1), rgba(96,165,250,0) 18%),
+        #0b1525;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 12px;
+    }
+
+    .group {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      margin-top: 8px;
+      overflow: hidden;
+      background: #0d192a;
+    }
+
+    .group-head {
+      width: 100%;
+      text-align: left;
+      border: none;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      border-radius: 0;
+      background: linear-gradient(135deg, rgba(59,130,246,0.28), rgba(34,211,238,0.14));
+      padding: 12px;
+      min-height: 48px;
+      font-size: 15px;
+    }
+
+    .group-sessions { display: grid; }
+
+    .session-row {
+      width: 100%;
+      text-align: left;
+      border: none;
+      border-top: 1px solid rgba(255,255,255,0.04);
+      border-radius: 0;
+      padding: 12px;
+      min-height: 48px;
+      font-size: 15px;
+      background: rgba(255,255,255,0.01);
+    }
+
+    .session-row.active {
+      background: linear-gradient(135deg, rgba(59,130,246,0.33), rgba(34,211,238,0.12));
+      color: #eaf4ff;
+    }
+
+    .inbox-item {
+      width: 100%;
+      text-align: left;
+      padding: 12px;
+      min-height: 56px;
+      font-size: 15px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: linear-gradient(135deg, rgba(255,203,102,0.18), rgba(255,122,138,0.08) 55%, rgba(255,255,255,0.02));
+      margin-top: 8px;
+    }
+
+    .inbox-clear {
+      flex: 0 0 auto;
+      min-height: 32px;
+      padding: 6px 10px;
+      font-size: 12px;
+      background: rgba(255,255,255,0.04);
+    }
+
+    .topbar {
+      flex-wrap: wrap;
+      align-items: flex-start;
+    }
+
+    .topbar-actions {
+      margin-left: auto;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    #session-title {
+      min-width: 0;
+      max-width: 70vw;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      display: inline-block;
+    }
+
+    #session-meta {
+      overflow-wrap: anywhere;
+    }
+
+    .session-head {
+      flex-wrap: wrap;
+      row-gap: 8px;
+    }
+
+    .session-head #session-title {
+      flex: 1 1 220px;
+      max-width: 100%;
+    }
+
+    .session-actions {
+      flex-wrap: wrap;
+    }
+
+    .session-actions button {
+      flex: 1 1 220px;
+    }
+
+    @media (max-width: 760px) {
+      .app {
+        padding: 10px 10px 16px;
+        gap: 10px;
+      }
+
+      .card {
+        padding: 10px;
+      }
+
+      .topbar-actions {
+        width: 100%;
+        margin-left: 0;
+        justify-content: stretch;
+      }
+
+      .topbar-actions button {
+        flex: 1 1 0;
+      }
+
+      .switcher-btn {
+        max-width: 100%;
+        flex-basis: 100%;
+      }
+
+      .between {
+        flex-wrap: wrap;
+        row-gap: 8px;
+      }
+
+      #session-title {
+        max-width: 100%;
+      }
+
+      .session-actions button {
+        flex: 1 1 100%;
+      }
+
+      .modal-panel {
+        top: env(safe-area-inset-top, 0px);
+        max-height: calc(100vh - env(safe-area-inset-top, 0px));
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <section class="card row between topbar">
+      <div>
+        <h1>Agent View Mobile</h1>
+        <div class="hint">Focus-first view with group switcher</div>
+      </div>
+      <div class="row topbar-actions">
+        <button id="btn-switcher" class="switcher-btn">Session</button>
+        <button id="btn-notify">Enable Notifications</button>
+        <button id="btn-test-notify">Test Notification</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="row between session-head">
+        <strong id="session-title">No session selected</strong>
+        <span class="status-pill" id="session-status-pill"><span class="dot"></span><span id="session-status-text">idle</span></span>
+      </div>
+      <div class="meta" id="session-meta">-</div>
+      <div class="hint" style="margin:8px 0;">Scroll to top to load older messages.</div>
+      <div id="transcript" class="transcript"></div>
+      <div class="row session-actions" style="margin-top: 10px;">
+        <button id="btn-confirm" class="warning" title="Send Enter for waiting prompt">Quick Confirm</button>
+        <button id="btn-interrupt" class="danger" title="Send Esc Esc">Interrupt (Esc Esc)</button>
+      </div>
+      <textarea id="message" class="input" placeholder="Send instructions to this session..."></textarea>
+      <div class="row between" style="margin-top: 8px;">
+        <span class="hint">Enter to send · Shift+Enter for new line</span>
+        <button id="btn-send" class="primary">Send</button>
+      </div>
+    </section>
+  </main>
+
+  <div id="switcher-modal" class="modal">
+    <div class="modal-panel">
+      <div class="row between">
+        <div class="row">
+          <button id="btn-switcher-back" style="display:none;">Back</button>
+          <strong id="switcher-title">Groups & Sessions</strong>
+        </div>
+        <button id="btn-close-switcher">Close</button>
+      </div>
+      <div class="meta" id="switcher-summary">0 groups</div>
+      <div id="switcher-inbox" class="stack"></div>
+      <div id="switcher-groups"></div>
+    </div>
+  </div>
+
+  <script>
+    const STORAGE_LAST_SESSION_KEY = "agent_view_last_session"
+    const STORAGE_LAST_NOTIFIED_INBOX_KEY = "agent_view_last_notified_inbox"
+
+    const state = {
+      sessions: [],
+      inbox: [],
+      selectedId: null,
+      before: 0,
+      hasMore: false,
+      loading: false,
+      unreadInbox: 0,
+      transcriptLines: [],
+      switcherGroupKey: null,
+      initialized: false,
+    }
+
+    let swRegistration = null
+
+    const el = {
+      btnSwitcher: document.getElementById("btn-switcher"),
+      btnCloseSwitcher: document.getElementById("btn-close-switcher"),
+      switcherModal: document.getElementById("switcher-modal"),
+      switcherInbox: document.getElementById("switcher-inbox"),
+      switcherGroups: document.getElementById("switcher-groups"),
+      switcherSummary: document.getElementById("switcher-summary"),
+      switcherBack: document.getElementById("btn-switcher-back"),
+      switcherTitle: document.getElementById("switcher-title"),
+
+      transcript: document.getElementById("transcript"),
+      sessionTitle: document.getElementById("session-title"),
+      sessionMeta: document.getElementById("session-meta"),
+      statusPill: document.getElementById("session-status-pill"),
+      statusText: document.getElementById("session-status-text"),
+
+      btnSend: document.getElementById("btn-send"),
+      btnConfirm: document.getElementById("btn-confirm"),
+      btnInterrupt: document.getElementById("btn-interrupt"),
+      btnNotify: document.getElementById("btn-notify"),
+      btnTestNotify: document.getElementById("btn-test-notify"),
+      message: document.getElementById("message"),
+    }
+
+    function esc(text) {
+      return String(text || "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+    }
+
+    function normalizeTranscriptLines(lines) {
+      const out = []
+      let horizontalRun = 0
+      for (const line of lines) {
+        const trimmed = String(line || "").trim()
+        const isHorizontalRule = /^[-_=─━]{20,}$/.test(trimmed)
+        if (isHorizontalRule) {
+          horizontalRun += 1
+          if (horizontalRun <= 2) out.push(line)
+          continue
+        }
+        horizontalRun = 0
+        out.push(line)
+      }
+      return out
+    }
+
+    function stripUnsupportedAnsi(input) {
+      return String(input || "")
+        .replace(/\x1b\][^\x07]*(\x07|\x1b\\)/g, "")
+        .replace(/\x1b\[[0-9;?]*[A-IK-Za-ik-z]/g, "")
+    }
+
+    function cssFromAnsiState(state) {
+      const styles = []
+      if (state.bold) styles.push("font-weight:700")
+      if (state.dim) styles.push("opacity:0.78")
+      if (state.italic) styles.push("font-style:italic")
+      if (state.underline) styles.push("text-decoration:underline")
+      if (state.fg) styles.push(`color:${state.fg}`)
+      if (state.bg) styles.push(`background:${state.bg}`)
+      return styles.join(";")
+    }
+
+    function parseSgrCodes(codes, state) {
+      const fgMap = {
+        30: "#111827", 31: "#ef4444", 32: "#22c55e", 33: "#f59e0b",
+        34: "#3b82f6", 35: "#d946ef", 36: "#06b6d4", 37: "#e5e7eb",
+        90: "#9ca3af", 91: "#f87171", 92: "#4ade80", 93: "#fbbf24",
+        94: "#60a5fa", 95: "#e879f9", 96: "#22d3ee", 97: "#ffffff",
+      }
+      const bgMap = {
+        40: "#111827", 41: "#7f1d1d", 42: "#14532d", 43: "#78350f",
+        44: "#1e3a8a", 45: "#701a75", 46: "#164e63", 47: "#e5e7eb",
+        100: "#374151", 101: "#ef4444", 102: "#22c55e", 103: "#f59e0b",
+        104: "#3b82f6", 105: "#d946ef", 106: "#06b6d4", 107: "#ffffff",
+      }
+
+      for (let i = 0; i < codes.length; i++) {
+        const code = codes[i]
+        if (code === 0) {
+          state.fg = null
+          state.bg = null
+          state.bold = false
+          state.dim = false
+          state.italic = false
+          state.underline = false
+          continue
+        }
+        if (code === 1) state.bold = true
+        else if (code === 2) state.dim = true
+        else if (code === 3) state.italic = true
+        else if (code === 4) state.underline = true
+        else if (code === 22) { state.bold = false; state.dim = false }
+        else if (code === 23) state.italic = false
+        else if (code === 24) state.underline = false
+        else if (code === 39) state.fg = null
+        else if (code === 49) state.bg = null
+        else if (fgMap[code]) state.fg = fgMap[code]
+        else if (bgMap[code]) state.bg = bgMap[code]
+        else if (code === 38 && codes[i + 1] === 2 && i + 4 < codes.length) {
+          state.fg = `rgb(${codes[i + 2]},${codes[i + 3]},${codes[i + 4]})`
+          i += 4
+        } else if (code === 48 && codes[i + 1] === 2 && i + 4 < codes.length) {
+          state.bg = `rgb(${codes[i + 2]},${codes[i + 3]},${codes[i + 4]})`
+          i += 4
+        }
+      }
+    }
+
+    function ansiToHtml(input) {
+      const text = stripUnsupportedAnsi(input)
+      const sgrRe = /\x1b\[([0-9;]*)m/g
+      const state = { fg: null, bg: null, bold: false, dim: false, italic: false, underline: false }
+      let out = ""
+      let lastIndex = 0
+      let match = null
+
+      while ((match = sgrRe.exec(text)) !== null) {
+        const chunk = text.slice(lastIndex, match.index)
+        if (chunk) {
+          const style = cssFromAnsiState(state)
+          const safe = esc(chunk)
+          out += style ? `<span style="${style}">${safe}</span>` : safe
+        }
+        const rawCodes = (match[1] || "").split(";").filter(Boolean).map((n) => Number.parseInt(n, 10))
+        parseSgrCodes(rawCodes.length ? rawCodes : [0], state)
+        lastIndex = match.index + match[0].length
+      }
+
+      const tail = text.slice(lastIndex)
+      if (tail) {
+        const style = cssFromAnsiState(state)
+        const safe = esc(tail)
+        out += style ? `<span style="${style}">${safe}</span>` : safe
+      }
+      return out
+    }
+
+    function transcriptLineClass(line) {
+      const text = String(line || "")
+      const trimmed = text.trim()
+      if (!trimmed) return "transcript-line"
+      if (/^[-_=─━]{20,}$/.test(trimmed)) return "transcript-line is-divider"
+      if (/^(⏺|Bash\(|curl\b|❯|>|[$#]\s)/.test(trimmed)) return "transcript-line is-command"
+      if (/(\.\.\. \+\d+ lines|\(ctrl\+o to expand\)|for shortcuts|new task\?)/i.test(trimmed)) return "transcript-line is-muted"
+      if (/\b(status:\s*(live|running|ok|approved|upcoming|success)|approved\b|created:)\b/i.test(trimmed)) return "transcript-line is-status-good"
+      if (/\b(error|failed|exception|quota|cancelled|denied|insufficient|invalid|stopped|churned)\b/i.test(trimmed)) return "transcript-line is-status-bad"
+      if (/\b(waiting|pending|warning|warn|retry|timeout)\b/i.test(trimmed)) return "transcript-line is-status-warn"
+      if (/^[?].*|^\?\s/.test(trimmed)) return "transcript-line is-prompt"
+      if (/^(note:|tip:|hint:)/i.test(trimmed)) return "transcript-line is-note"
+      return "transcript-line"
+    }
+
+    function semanticTranscriptHtml(lines) {
+      return lines
+        .map((line) => {
+          const cls = transcriptLineClass(line)
+          return `<span class="${cls}">${ansiToHtml(line)}</span>`
+        })
+        .join("\n")
+    }
+
+    function sessionPath(id) {
+      return encodeURIComponent(id)
+    }
+
+    function getInboxNotifySignature(inbox) {
+      return inbox
+        .map(item => `${item.id}:${item.status}`)
+        .sort()
+        .join("|")
+    }
+
+    function isDuplicateInboxNotification(signature) {
+      try {
+        const raw = localStorage.getItem(STORAGE_LAST_NOTIFIED_INBOX_KEY)
+        if (!raw) return false
+        const parsed = JSON.parse(raw)
+        if (!parsed || typeof parsed.signature !== "string" || typeof parsed.at !== "number") return false
+        return parsed.signature === signature && (Date.now() - parsed.at) < 60000
+      } catch {
+        return false
+      }
+    }
+
+    function markInboxNotification(signature) {
+      localStorage.setItem(
+        STORAGE_LAST_NOTIFIED_INBOX_KEY,
+        JSON.stringify({ signature, at: Date.now() })
+      )
+    }
+
+    async function api(path, options = {}) {
+      const res = await fetch(path, {
+        headers: { "content-type": "application/json" },
+        ...options,
+      })
+      if (!res.ok) {
+        const txt = await res.text()
+        throw new Error(txt || "request failed")
+      }
+      return res.json()
+    }
+
+    async function registerServiceWorker() {
+      if (!("serviceWorker" in navigator)) return null
+      try {
+        const reg = await navigator.serviceWorker.register("/sw.js")
+        swRegistration = reg
+        return reg
+      } catch (err) {
+        console.error("SW registration failed", err)
+        return null
+      }
+    }
+
+    function updateNotifyButtonText() {
+      if (!window.Notification) {
+        el.btnNotify.textContent = "Notification Unsupported"
+        return
+      }
+      el.btnNotify.textContent = Notification.permission === "granted"
+        ? "Notifications Enabled"
+        : "Enable Notifications"
+    }
+
+    async function notifySystem(title, body, options = {}) {
+      if (!window.Notification || Notification.permission !== "granted") return false
+      try {
+        const reg = swRegistration || await navigator.serviceWorker.getRegistration()
+        if (reg && reg.active) {
+          reg.active.postMessage({
+            type: "SHOW_NOTIFICATION",
+            title,
+            body,
+            tag: options.tag || "agent-view",
+            url: options.url || location.pathname + location.hash
+          })
+          return true
+        }
+      } catch (err) {
+        console.error("SW notification failed", err)
+      }
+      try {
+        new Notification(title, { body, tag: options.tag || "agent-view" })
+        return true
+      } catch {
+        return false
+      }
+    }
+
+    function statusClass(status) {
+      return `status-${status || "idle"}`
+    }
+
+    function sortSessions(sessions) {
+      return sessions.slice().sort((a, b) => {
+        const ao = Number.isFinite(a.order) ? a.order : 0
+        const bo = Number.isFinite(b.order) ? b.order : 0
+        return ao - bo
+      })
+    }
+
+    function groupSessions(sessions) {
+      const sorted = sortSessions(sessions)
+      const map = new Map()
+
+      for (const s of sorted) {
+        const key = s.groupPath || "ungrouped"
+        if (!map.has(key)) {
+          map.set(key, {
+            key,
+            name: key,
+            sessions: [],
+            stats: { running: 0, waiting: 0, error: 0 }
+          })
+        }
+        const g = map.get(key)
+        g.sessions.push(s)
+        if (s.status === "running") g.stats.running += 1
+        if (s.status === "waiting") g.stats.waiting += 1
+        if (s.status === "error") g.stats.error += 1
+      }
+
+      return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name))
+    }
+
+    function updateTopSwitcherLabel() {
+      const pending = state.inbox.length
+      el.btnSwitcher.textContent = pending > 0 ? `Session (${pending})` : "Session"
+    }
+
+    function renderSwitcher() {
+      const groups = groupSessions(state.sessions)
+      const totalGroups = groups.length
+      const inGroup = state.switcherGroupKey
+      const currentGroup = inGroup ? groups.find(g => g.key === inGroup) : null
+
+      el.switcherBack.style.display = inGroup ? "inline-block" : "none"
+      el.switcherTitle.textContent = currentGroup ? currentGroup.name : "Groups & Sessions"
+      el.switcherSummary.textContent = currentGroup
+        ? `${currentGroup.sessions.length} sessions`
+        : `${totalGroups} groups · ${state.sessions.length} sessions`
+
+      if (!inGroup) {
+        if (!state.inbox.length) {
+          el.switcherInbox.innerHTML = ""
+        } else {
+          el.switcherInbox.innerHTML = `
+            <div class="meta" style="margin-top:8px;">Inbox (${state.inbox.length})</div>
+            ${state.inbox.map(i => `
+              <div class="inbox-item">
+                <div class="row between">
+                  <button style="flex:1 1 auto; text-align:left; background:transparent; border:none; padding:0; min-height:0;" data-open-session="${esc(i.id)}">
+                    <strong>${esc(i.title)}</strong>
+                  </button>
+                  <div class="row" style="flex:0 0 auto;">
+                    <span class="meta">${esc(i.status)}</span>
+                    <button class="inbox-clear" data-ack-session="${esc(i.id)}">Clear</button>
+                  </div>
+                </div>
+                <div class="meta">${esc(i.tool)} · ${esc(i.groupPath)}</div>
+              </div>
+            `).join("")}
+          `
+        }
+
+        el.switcherGroups.innerHTML = groups.map(g => `
+          <button class="group-head row between" data-open-group="${esc(g.key)}" style="margin-top:8px; border-radius:10px;">
+            <span>${esc(g.name)}</span>
+            <span class="meta">${g.sessions.length} · ●${g.stats.running} ◐${g.stats.waiting} ✗${g.stats.error}</span>
+          </button>
+        `).join("")
+
+        el.switcherGroups.querySelectorAll("[data-open-group]").forEach(node => {
+          node.addEventListener("click", () => {
+            state.switcherGroupKey = node.dataset.openGroup || null
+            renderSwitcher()
+          })
+        })
+      } else {
+        el.switcherInbox.innerHTML = ""
+        const sessions = currentGroup ? currentGroup.sessions : []
+        el.switcherGroups.innerHTML = sessions.map(s => `
+          <button class="session-row ${state.selectedId === s.id ? "active" : ""}" data-open-session="${esc(s.id)}">
+            <div class="row between">
+              <span class="${statusClass(s.status)}"><span class="dot"></span>${esc(s.title)}</span>
+              <span class="meta">${esc(s.status)}</span>
+            </div>
+          </button>
+        `).join("")
+      }
+
+      el.switcherModal.querySelectorAll("[data-open-session]").forEach(node => {
+        node.addEventListener("click", async () => {
+          await selectSession(node.dataset.openSession)
+          await acknowledgeSession(node.dataset.openSession)
+          closeSwitcher()
+        })
+      })
+
+      el.switcherModal.querySelectorAll("[data-ack-session]").forEach(node => {
+        node.addEventListener("click", async (event) => {
+          event.stopPropagation()
+          await acknowledgeSession(node.dataset.ackSession)
+          renderSwitcher()
+        })
+      })
+
+    }
+
+    function openSwitcher() {
+      state.switcherGroupKey = null
+      renderSwitcher()
+      el.switcherModal.classList.add("open")
+    }
+
+    function closeSwitcher() {
+      el.switcherModal.classList.remove("open")
+    }
+
+    function updateHeader() {
+      const s = state.sessions.find(x => x.id === state.selectedId)
+      if (!s) {
+        el.sessionTitle.textContent = "No session selected"
+        el.sessionMeta.textContent = "-"
+        el.statusPill.className = "status-pill"
+        el.statusText.textContent = "idle"
+        return
+      }
+
+      el.sessionTitle.textContent = s.title
+      el.sessionMeta.textContent = `${s.groupPath} · ${s.tool}`
+      el.statusPill.className = `status-pill ${statusClass(s.status)}`
+      el.statusText.textContent = s.status
+      localStorage.setItem(STORAGE_LAST_SESSION_KEY, s.id)
+      location.hash = `#session/${encodeURIComponent(s.id)}`
+    }
+
+    function renderTranscript() {
+      if (!state.transcriptLines.length) {
+        el.transcript.innerHTML = `<span class="hint">No output yet.</span>`
+        return
+      }
+      const normalized = normalizeTranscriptLines(state.transcriptLines)
+      el.transcript.innerHTML = semanticTranscriptHtml(normalized)
+    }
+
+    function isTranscriptNearBottom() {
+      const remaining = el.transcript.scrollHeight - el.transcript.scrollTop - el.transcript.clientHeight
+      return remaining < 48
+    }
+
+    async function loadTranscriptPage(reset = false, stickToBottom = false) {
+      if (!state.selectedId || state.loading) return
+      state.loading = true
+      try {
+        const before = reset ? 0 : state.before
+        const data = await api(`/api/sessions/${sessionPath(state.selectedId)}/transcript?before=${before}&limit=200&maxLines=1000`)
+        if (reset) {
+          state.transcriptLines = data.lines
+          renderTranscript()
+          if (stickToBottom) {
+            el.transcript.scrollTop = el.transcript.scrollHeight
+          }
+        } else {
+          const prevHeight = el.transcript.scrollHeight
+          state.transcriptLines = [...data.lines, ...state.transcriptLines]
+          renderTranscript()
+          const newHeight = el.transcript.scrollHeight
+          el.transcript.scrollTop = newHeight - prevHeight
+        }
+        state.before = data.nextBefore
+        state.hasMore = data.hasMore
+      } finally {
+        state.loading = false
+      }
+    }
+
+    async function selectSession(id) {
+      if (!id) return
+      state.selectedId = id
+      state.before = 0
+      state.hasMore = false
+      state.transcriptLines = []
+      updateHeader()
+      updateTopSwitcherLabel()
+      await loadTranscriptPage(true, true)
+    }
+
+    async function sendMessage() {
+      const message = el.message.value.trim()
+      if (!message || !state.selectedId) return
+      el.message.value = ""
+      await api(`/api/sessions/${sessionPath(state.selectedId)}/send`, {
+        method: "POST",
+        body: JSON.stringify({ message }),
+      })
+      await loadTranscriptPage(true, true)
+    }
+
+    async function acknowledgeSession(id) {
+      if (!id) return
+      await api(`/api/sessions/${sessionPath(id)}/acknowledge`, { method: "POST" })
+      await refreshAll(false)
+    }
+
+    async function quickConfirm() {
+      if (!state.selectedId) return
+      await api(`/api/sessions/${sessionPath(state.selectedId)}/confirm`, { method: "POST" })
+      await refreshAll(true)
+    }
+
+    async function interruptSession() {
+      if (!state.selectedId) return
+      await api(`/api/sessions/${sessionPath(state.selectedId)}/interrupt`, { method: "POST" })
+      await refreshAll(true)
+    }
+
+    async function sendTestNotification() {
+      if (!window.Notification) {
+        alert("This browser does not support Notification API")
+        return
+      }
+      if (Notification.permission !== "granted") {
+        alert("Please enable notifications first")
+        return
+      }
+      const ok = await notifySystem("Agent View Test", "Notification channel works.", {
+        tag: "agent-view-test",
+        url: location.pathname + location.hash
+      })
+      if (!ok) alert("Notification blocked by browser policy")
+    }
+
+    async function refreshAll(forceTranscript = false) {
+      const [sessions, inbox] = await Promise.all([
+        api("/api/sessions"),
+        api("/api/inbox"),
+      ])
+
+      const previousInbox = state.unreadInbox
+      state.sessions = sessions
+      state.inbox = inbox
+      state.unreadInbox = inbox.length
+
+      const selectedExists = state.sessions.some(s => s.id === state.selectedId)
+      if (!selectedExists) {
+        const byHash = location.hash.startsWith("#session/")
+          ? decodeURIComponent(location.hash.replace("#session/", ""))
+          : null
+        const last = localStorage.getItem(STORAGE_LAST_SESSION_KEY)
+
+        if (byHash && state.sessions.some(s => s.id === byHash)) {
+          state.selectedId = byHash
+        } else if (last && state.sessions.some(s => s.id === last)) {
+          state.selectedId = last
+        } else if (sortSessions(state.sessions)[0]) {
+          state.selectedId = sortSessions(state.sessions)[0].id
+        } else {
+          state.selectedId = null
+        }
+      }
+
+      updateTopSwitcherLabel()
+      updateHeader()
+
+      if (state.selectedId) {
+        const shouldRefreshTranscript =
+          forceTranscript ||
+          state.transcriptLines.length === 0 ||
+          isTranscriptNearBottom()
+        if (shouldRefreshTranscript) {
+          await loadTranscriptPage(true, true)
+        }
+      }
+
+      if (!state.initialized) {
+        state.initialized = true
+        return
+      }
+
+      if (window.Notification && Notification.permission === "granted" && state.unreadInbox > previousInbox) {
+        const signature = getInboxNotifySignature(state.inbox)
+        if (!isDuplicateInboxNotification(signature)) {
+          const sent = await notifySystem("Agent View", `${state.unreadInbox} session(s) need attention`, {
+            tag: "agent-view-inbox",
+            url: location.pathname + location.hash
+          })
+          if (sent) markInboxNotification(signature)
+        }
+      }
+    }
+
+    el.transcript.addEventListener("scroll", async () => {
+      if (el.transcript.scrollTop > 0 || !state.hasMore || state.loading) return
+      await loadTranscriptPage(false)
+    })
+
+    el.btnSend.addEventListener("click", sendMessage)
+    el.btnConfirm.addEventListener("click", quickConfirm)
+    el.btnInterrupt.addEventListener("click", interruptSession)
+    el.btnTestNotify.addEventListener("click", sendTestNotification)
+    el.btnSwitcher.addEventListener("click", openSwitcher)
+    el.switcherBack.addEventListener("click", () => {
+      state.switcherGroupKey = null
+      renderSwitcher()
+    })
+    el.btnCloseSwitcher.addEventListener("click", closeSwitcher)
+    el.switcherModal.addEventListener("click", (event) => {
+      if (event.target === el.switcherModal) closeSwitcher()
+    })
+
+    el.message.addEventListener("keydown", async (event) => {
+      if (event.key !== "Enter") return
+      if (event.shiftKey) return
+      event.preventDefault()
+      await sendMessage()
+    })
+
+    let escPressedAt = 0
+    document.addEventListener("keydown", async (event) => {
+      if (event.key !== "Escape") return
+      const now = Date.now()
+      if (now - escPressedAt < 700) {
+        escPressedAt = 0
+        if (state.selectedId) {
+          await interruptSession()
+        }
+      } else {
+        escPressedAt = now
+      }
+    })
+
+    el.btnNotify.addEventListener("click", async () => {
+      if (!window.Notification) return
+      const permission = await Notification.requestPermission()
+      if (permission === "granted") await registerServiceWorker()
+      updateNotifyButtonText()
+    })
+
+    registerServiceWorker().catch(console.error)
+    updateNotifyButtonText()
+    refreshAll().catch(console.error)
+    setInterval(() => refreshAll(false).catch(console.error), 2500)
+  </script>
+</body>
+</html>

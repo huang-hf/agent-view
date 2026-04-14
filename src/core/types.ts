@@ -42,6 +42,11 @@ export interface Session {
   remoteHost: string   // SSH alias; empty string = local
 }
 
+export interface RemoteSession extends Session {
+  remoteName: string     // Key from remotes config
+  remoteHost: string     // SSH host
+}
+
 export interface Group {
   path: string
   name: string

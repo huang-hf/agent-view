@@ -292,6 +292,13 @@ export async function sendRawKeys(name: string, keys: string): Promise<void> {
   await execAsync(tmuxCmd(`send-keys -t "${name}" "${keys}"`))
 }
 
+/**
+ * Send Esc Esc to interrupt tools that use Escape for cancellation.
+ */
+export async function sendEscapeTwice(name: string): Promise<void> {
+  await execFileAsync("tmux", tmuxSpawnArgs("send-keys", "-t", name, "Escape", "Escape"))
+}
+
 export async function capturePane(
   name: string,
   options: {
@@ -345,9 +352,12 @@ export async function resizePane(name: string, width: number, height: number): P
  * Attach to a tmux session (replaces current terminal)
  */
 export function attachSession(name: string): void {
+  // Unset TMUX to allow nested sessions (we manage our own tmux server)
+  const env = { ...process.env }
+  delete env.TMUX
   const child = spawn("tmux", tmuxSpawnArgs("attach-session", "-t", name), {
     stdio: "inherit",
-    env: process.env
+    env
   })
 
   child.on("exit", (code) => {
@@ -447,7 +457,6 @@ const SPINNER_CHARS = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "
 const CLAUDE_WAITING_PATTERNS = [
   // Permission prompts with numbered options (blocked on user decision)
   /Do you want to proceed\?/i,
-  /\d\.\s*Yes\b/i,  // "1. Yes" pattern in selection UI
   /Esc to cancel.*Tab to amend/i,  // Permission prompt footer
   // Selection UI (blocked on user selection)
   /Enter to select.*to navigate/i,
@@ -482,6 +491,7 @@ const WAITING_PATTERNS = [
   /yes, proceed \(y\)/i,
   /don't ask again for these files/i,
   /tell codex what to do differently/i,
+  /(?:^|\n)\s*[›>]\s*1\.\s*Yes,\s*proceed\s*\(y\)/i
 ]
 
 // Codex CLI often shows an explicit approval header plus a confirmation footer.
@@ -543,7 +553,12 @@ export function parseToolStatus(output: string, tool?: string): ToolStatus {
       isBusy = CLAUDE_BUSY_PATTERNS.some(p => p.test(lastLines)) || hasSpinner(lastFewLines)
 
       // Check for waiting indicators (needs user input)
-      isWaiting = CLAUDE_WAITING_PATTERNS.some(p => p.test(lastLines))
+      const hasBaseWaitingCue = CLAUDE_WAITING_PATTERNS.some(p => p.test(lastLines))
+      const hasNumberedYes = /\b1\.\s*Yes\b/i.test(lastLines)
+      const hasPromptContext = /Do you want to proceed\?/i.test(lastLines)
+        || /Esc to cancel.*Tab to amend/i.test(lastLines)
+        || /Enter to select.*to navigate/i.test(lastLines)
+      isWaiting = hasBaseWaitingCue || (hasNumberedYes && hasPromptContext)
     }
     // If Claude has exited, both isBusy and isWaiting stay false -> will become idle
   } else if (tool === "codex") {
@@ -572,13 +587,16 @@ export function parseToolStatus(output: string, tool?: string): ToolStatus {
  */
 export async function attachWithPty(sessionName: string): Promise<void> {
   const ptyModule = await getPty()
+  // Unset TMUX to allow nested sessions (we manage our own tmux server)
+  const env = { ...process.env }
+  delete env.TMUX
   return new Promise((resolve) => {
     const ptyProcess = ptyModule.spawn("tmux", tmuxSpawnArgs("attach-session", "-t", sessionName), {
       name: "xterm-256color",
       cols: process.stdout.columns || 80,
       rows: process.stdout.rows || 24,
       cwd: process.cwd(),
-      env: process.env as { [key: string]: string }
+      env: env as { [key: string]: string }
     })
 
     let isDetaching = false
@@ -734,16 +752,18 @@ export function attachSessionSync(sessionName: string): void {
   } catch {
     // Ignore if doesn't exist
   }
-
   // Exit alternate screen buffer (TUI uses this)
   process.stdout.write("\x1b[?1049l")
   process.stdout.write("\x1b[2J\x1b[H")
   process.stdout.write("\x1b[?25h")
 
   // Attach to tmux - this blocks until user detaches (Ctrl+Q or Ctrl+B d)
+  // Unset TMUX to allow nested sessions (we manage our own tmux server)
+  const env = { ...process.env }
+  delete env.TMUX
   spawnSync("tmux", tmuxSpawnArgs("attach-session", "-t", sessionName), {
     stdio: "inherit",
-    env: process.env
+    env
   })
 
   // Clear screen and re-enter alternate buffer for TUI

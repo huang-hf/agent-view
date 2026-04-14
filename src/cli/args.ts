@@ -5,6 +5,8 @@
 
 export type CLICommand =
   | { type: "tui"; mode: "light" | "dark" }
+  | { type: "web"; host: string; port: number; noServe: boolean; restartWeb: boolean; daemon: boolean }
+  | { type: "all"; mode: "light" | "dark"; host: string; port: number; noServe: boolean; restartWeb: boolean }
   | { type: "help" }
   | { type: "version" }
   | { type: "new"; options: NewOptions }
@@ -16,10 +18,13 @@ export type CLICommand =
   | { type: "status"; id: string }
   | { type: "info"; id: string; json: boolean }
   | { type: "send"; id: string; message: string }
+  | { type: "acknowledge"; id: string }
+  | { type: "confirm"; id: string }
+  | { type: "interrupt"; id: string }
+  | { type: "output"; id: string; lines: number }
   | { type: "hibernate"; id: string }
   | { type: "wake"; id: string }
   | { type: "auto-hibernate"; minutes?: number }
-  | { type: "run" }
 
 export interface NewOptions {
   path: string
@@ -63,6 +68,42 @@ export function parseArgs(argv: string[]): CLICommand {
 
   if (getFlag(args, "--version") || getFlag(args, "-v")) {
     return { type: "version" }
+  }
+
+  if (getFlag(args, "--web")) {
+    const host = getFlagValue(args, "--host") ?? "0.0.0.0"
+    const portRaw = getFlagValue(args, "--port")
+    const port = portRaw ? parseInt(portRaw, 10) : 4317
+    if (isNaN(port) || port < 1 || port > 65535) {
+      process.stderr.write("Error: --port must be a valid port number (1-65535)\n")
+      process.exit(2)
+    }
+    return {
+      type: "web",
+      host,
+      port,
+      noServe: getFlag(args, "--no-serve"),
+      restartWeb: getFlag(args, "--restart-web"),
+      daemon: getFlag(args, "--daemon"),
+    }
+  }
+
+  if (getFlag(args, "--all")) {
+    const host = getFlagValue(args, "--host") ?? "0.0.0.0"
+    const portRaw = getFlagValue(args, "--port")
+    const port = portRaw ? parseInt(portRaw, 10) : 4317
+    if (isNaN(port) || port < 1 || port > 65535) {
+      process.stderr.write("Error: --port must be a valid port number (1-65535)\n")
+      process.exit(2)
+    }
+    return {
+      type: "all",
+      mode: getFlag(args, "--light") ? "light" : "dark",
+      host,
+      port,
+      noServe: getFlag(args, "--no-serve"),
+      restartWeb: getFlag(args, "--restart-web"),
+    }
   }
 
   if (getFlag(args, "--new") || getFlag(args, "-n")) {
@@ -161,6 +202,48 @@ export function parseArgs(argv: string[]): CLICommand {
     return { type: "send", id, message }
   }
 
+  if (getFlag(args, "--acknowledge")) {
+    const id = getFlagValue(args, "--acknowledge")
+    if (!id) {
+      process.stderr.write("Error: --acknowledge requires a session ID or title\n")
+      process.exit(2)
+    }
+    return { type: "acknowledge", id }
+  }
+
+  if (getFlag(args, "--confirm")) {
+    const id = getFlagValue(args, "--confirm")
+    if (!id) {
+      process.stderr.write("Error: --confirm requires a session ID or title\n")
+      process.exit(2)
+    }
+    return { type: "confirm", id }
+  }
+
+  if (getFlag(args, "--interrupt")) {
+    const id = getFlagValue(args, "--interrupt")
+    if (!id) {
+      process.stderr.write("Error: --interrupt requires a session ID or title\n")
+      process.exit(2)
+    }
+    return { type: "interrupt", id }
+  }
+
+  if (getFlag(args, "--output")) {
+    const id = getFlagValue(args, "--output")
+    if (!id) {
+      process.stderr.write("Error: --output requires a session ID or title\n")
+      process.exit(2)
+    }
+    const linesRaw = getFlagValue(args, "--lines")
+    const lines = linesRaw ? parseInt(linesRaw, 10) : 200
+    if (isNaN(lines) || lines < 1) {
+      process.stderr.write("Error: --lines must be a positive integer\n")
+      process.exit(2)
+    }
+    return { type: "output", id, lines }
+  }
+
   if (getFlag(args, "--info")) {
     const id = getFlagValue(args, "--info")
     if (!id) {
@@ -201,10 +284,6 @@ export function parseArgs(argv: string[]): CLICommand {
     return { type: "auto-hibernate" }
   }
 
-  if (getFlag(args, "--run") || getFlag(args, "-r")) {
-    return { type: "run" }
-  }
-
   // Fallback: TUI mode with optional --light
   const mode = getFlag(args, "--light") ? "light" : "dark"
   return { type: "tui", mode }
@@ -216,6 +295,8 @@ Agent View - Terminal Agent Management
 
 Usage:
   av [options]                    Launch TUI (default)
+  av --web [--host H --port P]    Launch mobile web UI/API server (auto Tailscale Serve)
+  av --all [--host H --port P]    Launch TUI + ensure web backend is running
   av --new [flags]                Create a new session
   av --list [flags]               List sessions
   av --delete <id> [flags]        Delete a session
@@ -225,13 +306,25 @@ Usage:
   av --status <id>                Get session status
   av --info <id> [--json]         Get session details
   av --send <id> <message>        Send instructions to a running session
+  av --acknowledge <id>           Mark a waiting/error session as read
+  av --confirm <id>               Send Enter to a waiting session
+  av --interrupt <id>             Send Esc Esc to interrupt the current task
+  av --output <id> [--lines N]    Show session output
   av --hibernate <id>             Hibernate a session (Claude-only)
   av --wake <id>                  Resume a hibernated session
   av --auto-hibernate [minutes]   Set/show auto-hibernate timeout (0 to disable)
-  av --run, -r                    Start headless watcher (notify mode via config)
 
 TUI Options:
   --light                         Use light mode theme
+
+Web Mode:
+  --web                           Start web server (mobile-friendly UI + API)
+  --all                           Start TUI and web backend together
+  --host <addr>                   Bind address (default: 0.0.0.0)
+  --port <port>                   Bind port (default: 4317)
+  --no-serve                      Skip automatic tailscale serve setup
+  --restart-web                   Force restart web backend on target port before start
+  --daemon                        Start web backend in background and exit
 
 New Session (--new, -n):
   --path <dir>                    Project path (default: cwd)
@@ -255,6 +348,7 @@ Delete Session (--delete):
   --force, -f                     Skip confirmation prompt
 
 General:
+  --lines <count>                 Used with --output (default: 200)
   --help, -h                      Show this help message
   --version, -v                   Show version
 `)

@@ -34,6 +34,7 @@ When working with AI coding agents, you often need to run multiple agents on dif
 
 - **Multi-Agent Dashboard** - View all your AI coding assistant sessions at a glance with real-time status indicators
 - **Smart Notifications** - Get notified when an agent finishes a task or needs your input, so you can context-switch efficiently
+- **Mobile Web UI** - Focus-first web client for phone usage with inbox, transcript paging, and remote session support
 - **Session Management** - Create, stop, restart, delete, and duplicate coding agent sessions with keyboard shortcuts
 - **Git Worktree Integration** - Automatically create isolated git worktrees for each agent session, keeping your branches clean. Optionally sync with the latest remote branch before creating each worktree
 - **Remote SSH Sessions** - Manage AI agent sessions on remote servers via SSH, with automatic reconnection and connection health monitoring
@@ -98,6 +99,40 @@ av -r
 
 For QQ Official Bot forwarding, a minimal relay service is included at `relay/` in this repository.
 See [`relay/README.md`](relay/README.md) for setup.
+
+### Web UI (Mobile + Remote)
+
+Start the web server:
+
+```bash
+# Local only
+av --web --host 127.0.0.1 --port 4317 --no-serve
+
+# Expose on Tailscale/LAN
+av --web --host 0.0.0.0 --port 4317
+
+# Background web daemon
+av --web --host 0.0.0.0 --port 4317 --daemon
+
+# Start TUI and ensure the web backend is running
+av --all --host 0.0.0.0 --port 4317
+```
+
+Web UI highlights:
+
+- Single-session mobile layout optimized for phone usage
+- Inbox for waiting and error sessions
+- Paged transcript browsing with upward loading
+- Quick actions: `Confirm`, `Interrupt`, `Acknowledge`
+- Browser notifications via Service Worker
+- Unified local and remote session access
+
+If you use Tailscale, `av --web` and `av --all` can automatically try `tailscale serve --bg <port>`.
+You can verify the published HTTPS URL with:
+
+```bash
+tailscale serve status
+```
 
 ### Keyboard Shortcuts
 

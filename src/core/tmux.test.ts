@@ -127,6 +127,14 @@ Press Enter to confirm`
     expect(status.isWaiting).toBe(true)
   })
 
+  test("detects Codex numbered yes proceed prompt", () => {
+    const output = `Approval required
+› 1. Yes, proceed (y)
+  2. No, cancel (n)`
+    const status = parseToolStatus(output, "codex")
+    expect(status.isWaiting).toBe(true)
+  })
+
   test("detects waiting for input", () => {
     const output = "The process is waiting for user input"
     const status = parseToolStatus(output)
@@ -150,6 +158,14 @@ Press Enter to confirm`
     const status = parseToolStatus(output, "claude")
     expect(status.isWaiting).toBe(true)
     expect(status.isBusy).toBe(false)
+  })
+
+  test("does not treat generic numbered '1. Yes' content as waiting", () => {
+    const output = `Implementation notes:
+1. Yes, we should refactor this module
+2. No blocking issues found`
+    const status = parseToolStatus(output, "claude")
+    expect(status.isWaiting).toBe(false)
   })
 
   test("detects Claude at prompt as idle (not waiting)", () => {

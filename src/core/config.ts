@@ -14,6 +14,13 @@ export interface WorktreeConfig {
   syncRemoteBranch?: string  // if set, fetch remote and base new worktrees on this branch (e.g. "origin/main")
 }
 
+export interface LastRemoteSession {
+  host: string
+  avPath: string
+  tool: string
+  projectPath: string
+}
+
 export interface AppConfig {
   defaultTool?: Tool
   theme?: string
@@ -24,6 +31,7 @@ export interface AppConfig {
   autoHibernateMinutes?: number   // 0 = disabled, default 0
   autoHibernatePrompted?: boolean // true = user has seen the prompt
   remoteHosts?: RemoteHost[]
+  lastRemoteSession?: LastRemoteSession
   copyClaudeDir?: boolean  // true = copy .claude dir to worktree (default true)
   notify?: NotifyConfig
 }
@@ -130,6 +138,21 @@ export function getShortcuts(): Shortcut[] {
  */
 export function getRecents(): Recent[] {
   return cachedConfig.recents || []
+}
+
+/**
+ * Get last remote session values
+ */
+export function getLastRemoteSession(): LastRemoteSession | undefined {
+  return cachedConfig.lastRemoteSession
+}
+
+/**
+ * Save last remote session values
+ */
+export async function saveLastRemoteSession(session: LastRemoteSession): Promise<void> {
+  const config = await loadConfig()
+  await saveConfig({ ...config, lastRemoteSession: session })
 }
 
 /**
