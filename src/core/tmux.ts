@@ -55,9 +55,8 @@ export const localExecutor = new LocalTmuxExecutor()
 
 export const SESSION_PREFIX = "agentorch_"
 
-// Signal files for UI requests from tmux keybinds
+// Signal file for command palette request
 const COMMAND_PALETTE_SIGNAL = "/tmp/agent-view-cmd-palette"
-const SESSION_LIST_SIGNAL = "/tmp/agent-view-session-list"
 
 // --- Isolated tmux server configuration ---
 // All agent-view sessions run on a dedicated tmux socket with a custom config,
@@ -272,37 +271,6 @@ export async function killSession(name: string): Promise<void> {
   try {
     await execAsync(tmuxCmd(`kill-session -t "${name}"`))
     sessionCache.data.delete(name)
-  } catch {
-    // Session might not exist
-  }
-}
-
-/**
- * Rename a tmux session and its window
- */
-export async function renameSession(oldName: string, newName: string): Promise<void> {
-  try {
-    // Rename the session
-    await execAsync(tmuxCmd(`rename-session -t "${oldName}" "${newName}"`))
-    // Also rename the window to match
-    await execAsync(tmuxCmd(`rename-window -t "${newName}" "${newName}"`))
-    // Update cache
-    const activity = sessionCache.data.get(oldName)
-    if (activity !== undefined) {
-      sessionCache.data.delete(oldName)
-      sessionCache.data.set(newName, activity)
-    }
-  } catch {
-    // Session might not exist
-  }
-}
-
-/**
- * Rename just the tmux window (for display purposes)
- */
-export async function renameWindow(sessionName: string, windowTitle: string): Promise<void> {
-  try {
-    await execAsync(tmuxCmd(`rename-window -t "${sessionName}" "${windowTitle}"`))
   } catch {
     // Session might not exist
   }
@@ -704,18 +672,6 @@ export function wasCommandPaletteRequested(): boolean {
   return false
 }
 
-export function wasSessionListRequested(): boolean {
-  try {
-    if (fs.existsSync(SESSION_LIST_SIGNAL)) {
-      fs.unlinkSync(SESSION_LIST_SIGNAL)
-      return true
-    }
-  } catch {
-    // Ignore errors
-  }
-  return false
-}
-
 /**
  * Attach to a tmux session with Ctrl+Q to detach
  * Keybindings and status bar are configured via the custom tmux.conf,
@@ -796,12 +752,6 @@ export function attachSessionSync(sessionName: string): void {
   } catch {
     // Ignore if doesn't exist
   }
-  try {
-    fs.unlinkSync(SESSION_LIST_SIGNAL)
-  } catch {
-    // Ignore if doesn't exist
-  }
-
   // Exit alternate screen buffer (TUI uses this)
   process.stdout.write("\x1b[?1049l")
   process.stdout.write("\x1b[2J\x1b[H")

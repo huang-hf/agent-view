@@ -32,8 +32,6 @@ import { ToastProvider, useToast } from "@tui/ui/toast"
 import { CommandProvider, useCommandDialog } from "@tui/component/dialog-command"
 import { DialogSessions } from "@tui/component/dialog-sessions"
 import { DialogNew } from "@tui/component/dialog-new"
-import { DialogNewRemote } from "@tui/component/dialog-new-remote"
-import { DialogNewWizard } from "@tui/component/dialog-new-wizard"
 import { DialogUpdate } from "@tui/component/dialog-update"
 import { checkForUpdate } from "@/core/updater"
 import { Home } from "@tui/routes/home"
@@ -208,7 +206,7 @@ function App(props: { onExit: () => Promise<void>; onRendererReady: (r: CliRende
         keybind: "N",
         suggested: true,
         onSelect: () => {
-          dialog.replace(() => <DialogNewWizard />)
+          dialog.replace(() => <DialogNew />)
         }
       },
       {
@@ -263,20 +261,13 @@ function App(props: { onExit: () => Promise<void>; onRendererReady: (r: CliRende
       command.open()
     }
 
-    if (evt.name === "n" && !evt.shift) {
+    if (evt.name === "n") {
       evt.preventDefault()
-      log("Opening new session wizard from App")
-      dialog.replace(() => <DialogNewWizard />)
+      log("Opening new dialog from App")
+      dialog.replace(() => <DialogNew />)
     }
 
-    if (evt.name === "n" && evt.shift) {
-      evt.preventDefault()
-      log("Opening new remote dialog from App")
-      dialog.replace(() => <DialogNewRemote />)
-    }
-
-    if (evt.name === "l" && evt.ctrl) {
-      evt.preventDefault()
+    if (evt.name === "l") {
       log("Opening sessions dialog from App")
       dialog.replace(() => <DialogSessions />)
     }
@@ -295,7 +286,7 @@ function App(props: { onExit: () => Promise<void>; onRendererReady: (r: CliRende
     if (evt.name === "?") {
       toast.show({
         title: "Help",
-        message: "Ctrl+K: Commands | Ctrl+L: Sessions | N: New | Q: Quit",
+        message: "Ctrl+K: Commands | L: Sessions | N: New | Q: Quit",
         variant: "info",
         duration: 5000
       })
