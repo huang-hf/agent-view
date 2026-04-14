@@ -119,7 +119,7 @@ export class SessionManager {
     const names = new Set<string>()
     for (const line of stdout.trim().split("\n")) {
       if (!line) continue
-      const [name] = line.replace(/^"/, "").split("\t")
+      const [name] = line.replace(/^"/, "").split("|")
       if (name) names.add(name)
     }
     this.remoteSessionCaches.set(host, names)
@@ -168,9 +168,38 @@ export class SessionManager {
   startRefreshLoop(intervalMs = 500): void {
     if (this.refreshInterval) return
 
+    const storage = getStorage()
+    storage.registerInstance(false)
+
+    // Heartbeat: keep our record alive so other instances can detect us
+    const heartbeatInterval = setInterval(() => {
+      storage.heartbeat()
+    }, 5000)
+
     this.refreshInterval = setInterval(async () => {
-      await this.refreshStatuses()
+      // Clean up dead instances (missed 3 heartbeats = 15s)
+      storage.cleanDeadInstances(15)
+      // Only the elected primary writes session statuses
+      // This prevents multiple concurrent instances from overwriting each other
+      const isPrimary = storage.electPrimary(15)
+      if (isPrimary) {
+        await this.refreshStatuses()
+      }
     }, intervalMs)
+
+    // Store heartbeat interval so we can clear it on stop
+    ;(this as any)._heartbeatInterval = heartbeatInterval
+  }
+
+  stopRefreshLoop(): void {
+    if ((this as any)._heartbeatInterval) {
+      clearInterval((this as any)._heartbeatInterval)
+      ;(this as any)._heartbeatInterval = null
+    }
+    if (this.refreshInterval) {
+      clearInterval(this.refreshInterval)
+      this.refreshInterval = null
+    }
   }
 
   stopRefreshLoop(): void {
@@ -298,7 +327,7 @@ export class SessionManager {
         // Refresh remote session cache
         try {
           const stdout = await executor.exec([
-            "list-windows", "-a", "-F", "#{session_name}\t#{window_activity}"
+            "list-windows", "-a", "-F", "#{session_name}|#{window_activity}"
           ])
           this.updateRemoteCache(host, stdout)
         } catch (err) {
@@ -318,9 +347,13 @@ export class SessionManager {
             let candidate: SessionStatus = "stopped"
             try {
               await executor.exec(["has-session", "-t", session.tmuxSession])
-              candidate = session.status
-            } catch {
+              // Session confirmed alive — if stored status is "stopped" it's stale;
+              // use "idle" so the session can escape the stopped state.
+              candidate = session.status === "stopped" ? "idle" : session.status
+              log("has-session OK for", session.id, "tmux=", session.tmuxSession, "candidate=", candidate)
+            } catch (err) {
               // keep stopped candidate
+              log("has-session FAILED for", session.id, "tmux=", session.tmuxSession, "err=", String(err))
             }
             const stabilized = this.stabilizeRemoteStoppedStatus(session.id, session.status, candidate)
             storage.writeStatus(session.id, stabilized, session.tool)
@@ -417,6 +450,7 @@ export class SessionManager {
           "new-session", "-d", "-s", tmuxName, "-c", options.projectPath
         ]
         if (command) newSessionArgs.push(command)
+        log("Remote new-session args:", JSON.stringify(newSessionArgs))
         await executor.exec(newSessionArgs)
       } else {
         await tmux.createSession({
@@ -591,11 +625,14 @@ export class SessionManager {
       }
     }
 
-    // For Claude sessions, generate a fresh session ID to avoid reuse conflicts
+    // For Claude sessions, generate a fresh session ID to avoid reuse conflicts.
+    // Preserve all original flags (e.g. --dangerously-skip-permissions) — only
+    // replace the --session-id value so Claude doesn't exit immediately due to
+    // missing flags in non-interactive remote environments.
     const isClaudeSession = session.tool === "claude" && session.toolData?.claudeSessionId
     const newClaudeSessionId = isClaudeSession ? randomUUID() : undefined
-    const command = isClaudeSession
-      ? `claude --session-id "${newClaudeSessionId}"`
+    const command = isClaudeSession && newClaudeSessionId
+      ? session.command.replace(/--session-id\s+"[^"]*"/, `--session-id "${newClaudeSessionId}"`)
       : session.command
 
     const env: Record<string, string> = { AGENT_ORCHESTRATOR_SESSION: session.id }

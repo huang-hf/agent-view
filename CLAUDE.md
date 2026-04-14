@@ -78,11 +78,12 @@ curl -fsSL https://raw.githubusercontent.com/frayo44/agent-view/main/uninstall.s
 ## Development
 
 ```bash
-bun install      # Install dependencies
-bun run dev      # Run in development mode
-bun run build    # Build for production
-bun run compile  # Compile standalone binary
-bun test         # Run tests
+bun install            # Install dependencies
+bun run dev            # Run in development mode
+bun run build          # Build for production
+bun run install-local  # Build + compile + install to ~/.agent-view/bin (use this after code changes)
+bun run compile        # Compile standalone binary
+bun test               # Run tests
 ```
 
 ## Important Files

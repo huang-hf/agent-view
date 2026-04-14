@@ -6,7 +6,7 @@
  * to avoid conflicts with the user's tmux configuration.
  */
 
-import { spawn, exec, execFile } from "child_process"
+import { spawn, exec, execFile, execFileSync } from "child_process"
 import { promisify } from "util"
 import path from "path"
 import os from "os"
@@ -87,6 +87,13 @@ function ensureConfig(): void {
     }
     if (needsWrite) {
       fs.writeFileSync(CONFIG_PATH, TMUX_CONF, { mode: 0o600 })
+      // Reload config in the running tmux server (if any) so mouse/settings
+      // take effect immediately without needing to restart agent-view.
+      try {
+        execFileSync("tmux", ["-L", TMUX_SOCKET, "source-file", CONFIG_PATH])
+      } catch {
+        // Server not running yet — that's fine, new sessions will pick up the config
+      }
     }
   } finally {
     configWritten = true

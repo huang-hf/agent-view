@@ -564,7 +564,9 @@ export function Home() {
 
     // g to create new group
     if (evt.name === "g" && !evt.shift) {
+      evt.preventDefault()
       dialog.push(() => <DialogGroup mode="create" />)
+      return
     }
 
     // m to move session to group
@@ -602,7 +604,9 @@ export function Home() {
         hostIndex: hostIndex >= 0 ? hostIndex : 0,
         groupPath: session.groupPath || undefined,
       }
+      evt.preventDefault()
       dialog.push(() => <DialogNew prefill={prefill} />)
+      return
     }
 
     // z to hibernate session

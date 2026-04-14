@@ -66,7 +66,7 @@ export class SshControlManager {
         "-o", `ControlPath=${socketPath}`,
         "-O", "check",
         alias
-      ])
+      ], { timeout: 5000 })
       this.statusMap.set(alias, "connected")
       return
     } catch {
@@ -83,7 +83,7 @@ export class SshControlManager {
         "-o", "BatchMode=yes",   // Fail fast if auth requires interactive input
         "-fN",                   // Background, no command
         alias
-      ])
+      ], { timeout: 15000 })
       this.statusMap.set(alias, "connected")
     } catch (err) {
       this.statusMap.set(alias, "offline")
@@ -130,7 +130,7 @@ export class SshControlManager {
         "-o", `ControlPath=${socketPath}`,
         "-O", "check",
         alias
-      ])
+      ], { timeout: 5000 })
       this.statusMap.set(alias, "connected")
       return true
     } catch {
