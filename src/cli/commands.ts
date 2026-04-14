@@ -357,6 +357,24 @@ export async function cmdSend(id: string, message: string): Promise<void> {
   console.log(`Sent to ${session.title}: ${message.length > 80 ? message.slice(0, 80) + "..." : message}`)
 }
 
+export async function cmdAcknowledge(id: string): Promise<void> {
+  const resolvedId = resolveSessionId(id)
+  if (!resolvedId) {
+    process.stderr.write(`Error: Session '${id}' not found\n`)
+    process.exit(3)
+  }
+
+  const session = getStorage().getSession(resolvedId)
+  if (!session) {
+    process.stderr.write(`Error: Session '${id}' not found\n`)
+    process.exit(3)
+  }
+
+  const manager = new SessionManager()
+  manager.acknowledge(resolvedId)
+  console.log(`Acknowledged session: ${session.title}`)
+}
+
 export async function cmdConfirm(id: string): Promise<void> {
   const resolvedId = resolveSessionId(id)
   if (!resolvedId) {

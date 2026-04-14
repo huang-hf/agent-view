@@ -8,6 +8,7 @@ import type { CLICommand } from "./cli/args"
 import pkg from "../package.json"
 import { execFile, spawn } from "child_process"
 import { promisify } from "util"
+import * as fsSync from "fs"
 import * as fs from "fs/promises"
 import * as path from "path"
 import { getConfigDir, ensureConfigDir } from "./core/config"
@@ -16,7 +17,7 @@ const execFileAsync = promisify(execFile)
 
 async function executeHeadlessCommand(command: CLICommand): Promise<void> {
   // Lazy import to avoid loading TUI dependencies for headless commands
-  const { cmdNew, cmdList, cmdDelete, cmdStop, cmdRestart, cmdAttach, cmdStatus, cmdInfo, cmdSend, cmdConfirm, cmdInterrupt, cmdOutput, cmdHibernate, cmdWake, cmdAutoHibernate } = await import("./cli/commands")
+  const { cmdNew, cmdList, cmdDelete, cmdStop, cmdRestart, cmdAttach, cmdStatus, cmdInfo, cmdSend, cmdAcknowledge, cmdConfirm, cmdInterrupt, cmdOutput, cmdHibernate, cmdWake, cmdAutoHibernate } = await import("./cli/commands")
 
   switch (command.type) {
     case "new":
@@ -45,6 +46,9 @@ async function executeHeadlessCommand(command: CLICommand): Promise<void> {
       break
     case "send":
       await cmdSend(command.id, command.message)
+      break
+    case "acknowledge":
+      await cmdAcknowledge(command.id)
       break
     case "confirm":
       await cmdConfirm(command.id)
@@ -85,6 +89,10 @@ function getWebPidFile(port: number): string {
   return path.join(getConfigDir(), `web-${port}.pid`)
 }
 
+function getWebLogFile(port: number): string {
+  return path.join(getConfigDir(), `web-${port}.log`)
+}
+
 function isProcessAlive(pid: number): boolean {
   try {
     process.kill(pid, 0)
@@ -115,6 +123,35 @@ async function clearWebPid(port: number): Promise<void> {
   } catch {
     // ignore
   }
+}
+
+async function stopExistingWeb(port: number): Promise<void> {
+  const existingPid = await readWebPid(port)
+  if (!existingPid) return
+  if (!isProcessAlive(existingPid)) {
+    await clearWebPid(port)
+    return
+  }
+
+  try {
+    process.kill(existingPid, "SIGTERM")
+  } catch {
+    // ignore
+  }
+
+  for (let i = 0; i < 10; i++) {
+    await sleep(200)
+    if (!isProcessAlive(existingPid)) break
+  }
+
+  if (isProcessAlive(existingPid)) {
+    try {
+      process.kill(existingPid, "SIGKILL")
+    } catch {
+      // ignore
+    }
+  }
+  await clearWebPid(port)
 }
 
 async function isWebHealthy(port: number): Promise<boolean> {
@@ -184,27 +221,42 @@ async function ensureWebBackground(host: string, port: number, noServe: boolean)
   }
 
   const { cmd, args } = getWebSpawnCommand(host, port)
+  await ensureConfigDir()
+  const logFd = fsSync.openSync(getWebLogFile(port), "a")
   const child = spawn(cmd, args, {
     detached: true,
-    stdio: "ignore",
+    stdio: ["ignore", logFd, logFd],
     env: process.env
   })
   if (typeof child.pid === "number" && child.pid > 0) {
     await writeWebPid(port, child.pid)
   }
   child.unref()
+  fsSync.closeSync(logFd)
 
-  await sleep(600)
-  const started = await isWebHealthy(port)
+  let started = false
+  for (let i = 0; i < 10; i++) {
+    await sleep(300)
+    if (await isWebHealthy(port)) {
+      started = true
+      break
+    }
+  }
   if (started) {
     console.log(`Web backend started on :${port}`)
   } else {
-    console.warn(`Warning: web backend may not be ready yet on :${port}`)
+    console.warn(`Warning: web backend did not become healthy on :${port}`)
+    console.warn(`Check log: ${getWebLogFile(port)}`)
   }
 
   if (!noServe) {
     await ensureTailscaleServe(port)
   }
+}
+
+async function restartWebBackground(host: string, port: number, noServe: boolean): Promise<void> {
+  await stopExistingWeb(port)
+  await ensureWebBackground(host, port, noServe)
 }
 
 async function main() {
@@ -232,6 +284,19 @@ async function main() {
 
   if (command.type === "web") {
     try {
+      if (command.daemon) {
+        if (command.restartWeb) {
+          await restartWebBackground(command.host, command.port, command.noServe)
+        } else {
+          await ensureWebBackground(command.host, command.port, command.noServe)
+        }
+        console.log(`Web backend running in background on :${command.port}`)
+        console.log(`Log file: ${getWebLogFile(command.port)}`)
+        return
+      }
+      if (command.restartWeb) {
+        await stopExistingWeb(command.port)
+      }
       if (!command.noServe) {
         await ensureTailscaleServe(command.port)
       }
@@ -246,7 +311,11 @@ async function main() {
 
   if (command.type === "all") {
     try {
-      await ensureWebBackground(command.host, command.port, command.noServe)
+      if (command.restartWeb) {
+        await restartWebBackground(command.host, command.port, command.noServe)
+      } else {
+        await ensureWebBackground(command.host, command.port, command.noServe)
+      }
       await launchTUI(command.mode)
     } catch (error) {
       console.error("Fatal error:", error)

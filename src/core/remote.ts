@@ -158,6 +158,15 @@ export class RemoteManager {
     this.clearCache()
   }
 
+  async acknowledgeSession(session: RemoteSession): Promise<void> {
+    const runner = this.getRunner(session.remoteName)
+    if (!runner) {
+      throw new Error(`Remote "${session.remoteName}" not found`)
+    }
+    await runner.acknowledge(session.id)
+    this.clearCache()
+  }
+
   async confirmSession(session: RemoteSession): Promise<void> {
     const runner = this.getRunner(session.remoteName)
     if (!runner) {

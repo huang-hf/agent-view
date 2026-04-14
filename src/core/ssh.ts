@@ -227,6 +227,10 @@ export class SSHRunner {
     await this.run(["--send", sessionId, message])
   }
 
+  async acknowledge(sessionId: string): Promise<void> {
+    await this.run(["--acknowledge", sessionId])
+  }
+
   async confirm(sessionId: string): Promise<void> {
     await this.run(["--confirm", sessionId])
   }

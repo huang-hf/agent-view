@@ -99,13 +99,21 @@ av --web --host 127.0.0.1 --port 4317 --no-serve
 # Expose on LAN/Tailscale (auto tailscale serve)
 av --web --host 0.0.0.0 --port 4317
 
+# Stable background web daemon
+av --web --host 0.0.0.0 --port 4317 --daemon
+
 # Start TUI + ensure web backend + tailscale serve
 av --all --host 0.0.0.0 --port 4317
+
+# Force restart web backend (useful after UI updates)
+av --all --host 0.0.0.0 --port 4317 --restart-web
 ```
 
 Then open `http://<host>:4317`.
 
 `av --all` is idempotent for web startup: if the web backend is already running on the target port, it will reuse it instead of restarting.
+Use `--restart-web` when you want to force-refresh the web backend process.
+Use `av --web --daemon` when you want a stable background web process managed by `av` itself instead of shell backgrounding.
 
 #### Web UI highlights
 

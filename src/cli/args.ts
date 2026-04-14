@@ -5,8 +5,8 @@
 
 export type CLICommand =
   | { type: "tui"; mode: "light" | "dark" }
-  | { type: "web"; host: string; port: number; noServe: boolean }
-  | { type: "all"; mode: "light" | "dark"; host: string; port: number; noServe: boolean }
+  | { type: "web"; host: string; port: number; noServe: boolean; restartWeb: boolean; daemon: boolean }
+  | { type: "all"; mode: "light" | "dark"; host: string; port: number; noServe: boolean; restartWeb: boolean }
   | { type: "help" }
   | { type: "version" }
   | { type: "new"; options: NewOptions }
@@ -18,6 +18,7 @@ export type CLICommand =
   | { type: "status"; id: string }
   | { type: "info"; id: string; json: boolean }
   | { type: "send"; id: string; message: string }
+  | { type: "acknowledge"; id: string }
   | { type: "confirm"; id: string }
   | { type: "interrupt"; id: string }
   | { type: "output"; id: string; lines: number }
@@ -77,7 +78,14 @@ export function parseArgs(argv: string[]): CLICommand {
       process.stderr.write("Error: --port must be a valid port number (1-65535)\n")
       process.exit(2)
     }
-    return { type: "web", host, port, noServe: getFlag(args, "--no-serve") }
+    return {
+      type: "web",
+      host,
+      port,
+      noServe: getFlag(args, "--no-serve"),
+      restartWeb: getFlag(args, "--restart-web"),
+      daemon: getFlag(args, "--daemon"),
+    }
   }
 
   if (getFlag(args, "--all")) {
@@ -93,7 +101,8 @@ export function parseArgs(argv: string[]): CLICommand {
       mode: getFlag(args, "--light") ? "light" : "dark",
       host,
       port,
-      noServe: getFlag(args, "--no-serve")
+      noServe: getFlag(args, "--no-serve"),
+      restartWeb: getFlag(args, "--restart-web"),
     }
   }
 
@@ -193,6 +202,15 @@ export function parseArgs(argv: string[]): CLICommand {
     return { type: "send", id, message }
   }
 
+  if (getFlag(args, "--acknowledge")) {
+    const id = getFlagValue(args, "--acknowledge")
+    if (!id) {
+      process.stderr.write("Error: --acknowledge requires a session ID or title\n")
+      process.exit(2)
+    }
+    return { type: "acknowledge", id }
+  }
+
   if (getFlag(args, "--confirm")) {
     const id = getFlagValue(args, "--confirm")
     if (!id) {
@@ -288,6 +306,7 @@ Usage:
   av --status <id>                Get session status
   av --info <id> [--json]         Get session details
   av --send <id> <message>        Send instructions to a running session
+  av --acknowledge <id>           Mark a waiting/error session as read
   av --confirm <id>               Send Enter to a waiting session
   av --interrupt <id>             Send Esc Esc to interrupt the current task
   av --output <id> [--lines N]    Show session output
@@ -304,6 +323,8 @@ Web Mode:
   --host <addr>                   Bind address (default: 0.0.0.0)
   --port <port>                   Bind port (default: 4317)
   --no-serve                      Skip automatic tailscale serve setup
+  --restart-web                   Force restart web backend on target port before start
+  --daemon                        Start web backend in background and exit
 
 New Session (--new, -n):
   --path <dir>                    Project path (default: cwd)
