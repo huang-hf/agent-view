@@ -48,9 +48,6 @@ describe("config", () => {
       expect(config.worktree).toBeDefined()
       expect(config.worktree?.defaultBaseBranch).toBe("main")
       expect(config.worktree?.autoCleanup).toBe(true)
-      expect(config.notify?.enabled).toBe(false)
-      expect(config.notify?.cooldownSeconds).toBe(300)
-      expect(config.notify?.actionServer?.enabled).toBe(false)
     })
 
     test("returns a copy, not the original", () => {

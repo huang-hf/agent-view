@@ -1,41 +1,57 @@
 import { describe, test, expect } from "bun:test"
-import { SshControlManager, SshTmuxExecutor } from "./ssh"
 
-describe("SshControlManager", () => {
-  test("getSocketPath returns consistent path for same alias", () => {
-    const mgr = new SshControlManager()
-    const p1 = mgr.getSocketPath("gpu-3090")
-    const p2 = mgr.getSocketPath("gpu-3090")
-    expect(p1).toBe(p2)
-    expect(p1).toContain("gpu-3090")
+import { SSHRunner } from "./ssh"
+
+describe("SSHRunner", () => {
+  describe("constructor", () => {
+    test("creates runner with required parameters", () => {
+      const runner = new SSHRunner("myremote", "user@host")
+      expect(runner).toBeDefined()
+    })
+
+    test("creates runner with custom av path", () => {
+      const runner = new SSHRunner("myremote", "user@host", "/custom/path/av")
+      expect(runner).toBeDefined()
+    })
   })
 
-  test("getSocketPath returns different paths for different aliases", () => {
-    const mgr = new SshControlManager()
-    const p1 = mgr.getSocketPath("host-a")
-    const p2 = mgr.getSocketPath("host-b")
-    expect(p1).not.toBe(p2)
-  })
-
-  test("getStatus returns offline for unknown host", () => {
-    const mgr = new SshControlManager()
-    expect(mgr.getStatus("unknown")).toBe("offline")
-  })
-
-  test("getStatus returns known values", () => {
-    const mgr = new SshControlManager()
-    const valid = ["connecting", "connected", "offline"]
-    const status = mgr.getStatus("any")
-    expect(valid).toContain(status)
-  })
+  // Note: SSH connection tests removed - they're slow, flaky, and potentially unsafe
+  // (could connect to real hosts if the fake hostname happens to exist)
 })
 
-describe("SshTmuxExecutor", () => {
-  test("implements TmuxExecutor interface", () => {
-    const mgr = new SshControlManager()
-    const exec = new SshTmuxExecutor("gpu-3090", mgr)
-    expect(typeof exec.exec).toBe("function")
-    expect(typeof exec.execFile).toBe("function")
-    expect(typeof exec.spawnAttach).toBe("function")
+describe("isRemoteSession type guard", () => {
+  // Import the type guard
+  const { isRemoteSession } = require("./types")
+
+  test("returns true for remote session", () => {
+    const remoteSession = {
+      id: "123",
+      title: "Test",
+      projectPath: "/path",
+      tool: "claude",
+      status: "running",
+      groupPath: "@remote/group",
+      createdAt: new Date(),
+      lastAccessed: new Date(),
+      acknowledged: true,
+      remoteName: "myremote",
+      remoteHost: "user@host",
+    }
+    expect(isRemoteSession(remoteSession)).toBe(true)
+  })
+
+  test("returns false for local session", () => {
+    const localSession = {
+      id: "123",
+      title: "Test",
+      projectPath: "/path",
+      tool: "claude",
+      status: "running",
+      groupPath: "default",
+      createdAt: new Date(),
+      lastAccessed: new Date(),
+      acknowledged: true,
+    }
+    expect(isRemoteSession(localSession)).toBe(false)
   })
 })

@@ -55,8 +55,9 @@ export const localExecutor = new LocalTmuxExecutor()
 
 export const SESSION_PREFIX = "agentorch_"
 
-// Signal file for command palette request
+// Signal files for UI requests from tmux keybinds
 const COMMAND_PALETTE_SIGNAL = "/tmp/agent-view-cmd-palette"
+const SESSION_LIST_SIGNAL = "/tmp/agent-view-session-list"
 
 // --- Isolated tmux server configuration ---
 // All agent-view sessions run on a dedicated tmux socket with a custom config,
@@ -269,6 +270,37 @@ export async function killSession(name: string): Promise<void> {
   }
 }
 
+/**
+ * Rename a tmux session and its window
+ */
+export async function renameSession(oldName: string, newName: string): Promise<void> {
+  try {
+    // Rename the session
+    await execAsync(tmuxCmd(`rename-session -t "${oldName}" "${newName}"`))
+    // Also rename the window to match
+    await execAsync(tmuxCmd(`rename-window -t "${newName}" "${newName}"`))
+    // Update cache
+    const activity = sessionCache.data.get(oldName)
+    if (activity !== undefined) {
+      sessionCache.data.delete(oldName)
+      sessionCache.data.set(newName, activity)
+    }
+  } catch {
+    // Session might not exist
+  }
+}
+
+/**
+ * Rename just the tmux window (for display purposes)
+ */
+export async function renameWindow(sessionName: string, windowTitle: string): Promise<void> {
+  try {
+    await execAsync(tmuxCmd(`rename-window -t "${sessionName}" "${windowTitle}"`))
+  } catch {
+    // Session might not exist
+  }
+}
+
 export async function sendKeys(name: string, keys: string): Promise<void> {
   // Use execFile + tmuxSpawnArgs (argument array) to prevent shell injection —
   // values are passed directly to the process, never interpreted by a shell.
@@ -345,9 +377,12 @@ export async function resizePane(name: string, width: number, height: number): P
  * Attach to a tmux session (replaces current terminal)
  */
 export function attachSession(name: string): void {
+  // Unset TMUX to allow nested sessions (we manage our own tmux server)
+  const env = { ...process.env }
+  delete env.TMUX
   const child = spawn("tmux", tmuxSpawnArgs("attach-session", "-t", name), {
     stdio: "inherit",
-    env: process.env
+    env
   })
 
   child.on("exit", (code) => {
@@ -481,6 +516,7 @@ const WAITING_PATTERNS = [
   /yes, proceed \(y\)/i,
   /don't ask again for these files/i,
   /tell codex what to do differently/i,
+  /(?:^|\n)\s*[›>]\s*1\.\s*Yes,\s*proceed\s*\(y\)/i
 ]
 
 // Codex CLI often shows an explicit approval header plus a confirmation footer.
@@ -576,13 +612,16 @@ export function parseToolStatus(output: string, tool?: string): ToolStatus {
  */
 export async function attachWithPty(sessionName: string): Promise<void> {
   const ptyModule = await getPty()
+  // Unset TMUX to allow nested sessions (we manage our own tmux server)
+  const env = { ...process.env }
+  delete env.TMUX
   return new Promise((resolve) => {
     const ptyProcess = ptyModule.spawn("tmux", tmuxSpawnArgs("attach-session", "-t", sessionName), {
       name: "xterm-256color",
       cols: process.stdout.columns || 80,
       rows: process.stdout.rows || 24,
       cwd: process.cwd(),
-      env: process.env as { [key: string]: string }
+      env: env as { [key: string]: string }
     })
 
     let isDetaching = false
@@ -650,6 +689,18 @@ export function wasCommandPaletteRequested(): boolean {
   try {
     if (fs.existsSync(COMMAND_PALETTE_SIGNAL)) {
       fs.unlinkSync(COMMAND_PALETTE_SIGNAL)
+      return true
+    }
+  } catch {
+    // Ignore errors
+  }
+  return false
+}
+
+export function wasSessionListRequested(): boolean {
+  try {
+    if (fs.existsSync(SESSION_LIST_SIGNAL)) {
+      fs.unlinkSync(SESSION_LIST_SIGNAL)
       return true
     }
   } catch {
@@ -738,6 +789,11 @@ export function attachSessionSync(sessionName: string): void {
   } catch {
     // Ignore if doesn't exist
   }
+  try {
+    fs.unlinkSync(SESSION_LIST_SIGNAL)
+  } catch {
+    // Ignore if doesn't exist
+  }
 
   // Exit alternate screen buffer (TUI uses this)
   process.stdout.write("\x1b[?1049l")
@@ -745,9 +801,12 @@ export function attachSessionSync(sessionName: string): void {
   process.stdout.write("\x1b[?25h")
 
   // Attach to tmux - this blocks until user detaches (Ctrl+Q or Ctrl+B d)
+  // Unset TMUX to allow nested sessions (we manage our own tmux server)
+  const env = { ...process.env }
+  delete env.TMUX
   spawnSync("tmux", tmuxSpawnArgs("attach-session", "-t", sessionName), {
     stdio: "inherit",
-    env: process.env
+    env
   })
 
   // Clear screen and re-enter alternate buffer for TUI
