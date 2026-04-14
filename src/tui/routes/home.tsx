@@ -771,7 +771,8 @@ export function Home() {
           return
         }
         if (session.tmuxSession) {
-          getSessionManager().confirmWaiting(session.id, "").then(() => {
+          const confirmInput = session.tool === "codex" ? "y" : ""
+          getSessionManager().confirmWaiting(session.id, confirmInput).then(() => {
             toast.show({ message: "✓ Confirmed", variant: "success", duration: 1500 })
             sync.refresh()
           }).catch((err) => {

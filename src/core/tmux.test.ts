@@ -115,6 +115,13 @@ describe("parseToolStatus", () => {
     expect(status.isWaiting).toBe(true)
   })
 
+  test("does not treat generic 'do you want to' text as codex waiting", () => {
+    const output = `Assistant answer:
+Do you want to refactor this helper function?`
+    const status = parseToolStatus(output, "codex")
+    expect(status.isWaiting).toBe(false)
+  })
+
   test("detects waiting for input", () => {
     const output = "The process is waiting for user input"
     const status = parseToolStatus(output)

@@ -462,6 +462,11 @@ export interface ToolStatus {
   hasError: boolean
 }
 
+export interface ToolStatusDebug extends ToolStatus {
+  waitingReason?: string
+  errorReason?: string
+}
+
 export function stripAnsi(text: string): string {
   // Remove ANSI escape sequences (colors, cursor movement, etc.)
   return text.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "")
@@ -513,6 +518,16 @@ const WAITING_PATTERNS = [
   /Press enter to continue/i,
   /waiting for.*input/i,
   /do you want to/i,
+]
+
+// Codex CLI waiting indicators. Keep these stricter than generic patterns to
+// avoid false positives from normal model text (e.g. "do you want to ...").
+const CODEX_WAITING_PATTERNS = [
+  /approval required/i,
+  /confirm to continue/i,
+  /press (enter|return) to (confirm|continue)/i,
+  /run command\?/i,
+  /apply patch\?/i,
   /would you like to make the following edits/i,
   /yes, proceed \(y\)/i,
   /don't ask again for these files/i,
@@ -541,6 +556,11 @@ function hasSpinner(text: string): boolean {
  * @param tool - Optional tool type for tool-specific detection
  */
 export function parseToolStatus(output: string, tool?: string): ToolStatus {
+  const { waitingReason, errorReason, ...status } = parseToolStatusDebug(output, tool)
+  return status
+}
+
+export function parseToolStatusDebug(output: string, tool?: string): ToolStatusDebug {
   const cleaned = stripAnsi(output)
   // Filter out trailing empty lines before slicing - Claude Code TUI often has blank padding
   const allLines = cleaned.split("\n")
@@ -550,12 +570,15 @@ export function parseToolStatus(output: string, tool?: string): ToolStatus {
   }
   const trimmedLines = allLines.slice(0, lastNonEmptyIdx + 1)
   const lastLines = trimmedLines.slice(-30).join("\n")
+  const lastWideLines = trimmedLines.slice(-120).join("\n")
   const lastFewLines = trimmedLines.slice(-10).join("\n")
 
   let isWaiting = false
   let isBusy = false
   let hasError = false
   let hasExited = false
+  let waitingReason: string | undefined
+  let errorReason: string | undefined
 
   if (tool === "claude") {
     // Claude Code specific detection
@@ -568,26 +591,41 @@ export function parseToolStatus(output: string, tool?: string): ToolStatus {
       isBusy = CLAUDE_BUSY_PATTERNS.some(p => p.test(lastLines)) || hasSpinner(lastFewLines)
 
       // Check for waiting indicators (needs user input)
-      const hasBaseWaitingCue = CLAUDE_WAITING_PATTERNS.some(p => p.test(lastLines))
+      const matchedClaudeWaiting = CLAUDE_WAITING_PATTERNS.find(p => p.test(lastLines))
+      const hasBaseWaitingCue = !!matchedClaudeWaiting
       const hasNumberedYes = /\b1\.\s*Yes\b/i.test(lastLines)
       const hasPromptContext = /Do you want to proceed\?/i.test(lastLines)
         || /Esc to cancel.*Tab to amend/i.test(lastLines)
         || /Enter to select.*to navigate/i.test(lastLines)
       isWaiting = hasBaseWaitingCue || (hasNumberedYes && hasPromptContext)
+      if (matchedClaudeWaiting) waitingReason = matchedClaudeWaiting.source
+      else if (hasNumberedYes && hasPromptContext) waitingReason = "claude_numbered_yes_with_prompt_context"
     }
     // If Claude has exited, both isBusy and isWaiting stay false -> will become idle
+  } else if (tool === "codex") {
+    // Codex approval blocks can move above the last 30 lines when command output
+    // is noisy. Use a wider context window and codex-specific prompt rules.
+    const matchedCodexWaiting = CODEX_WAITING_PATTERNS.find(p => p.test(lastWideLines))
+    isWaiting = !!matchedCodexWaiting
+    if (matchedCodexWaiting) waitingReason = matchedCodexWaiting.source
   } else {
     // Generic tool detection
-    isWaiting = WAITING_PATTERNS.some(p => p.test(lastLines))
+    const matchedWaiting = WAITING_PATTERNS.find(p => p.test(lastLines))
+    isWaiting = !!matchedWaiting
+    if (matchedWaiting) waitingReason = matchedWaiting.source
   }
 
-  hasError = ERROR_PATTERNS.some(p => p.test(lastLines))
+  const matchedError = ERROR_PATTERNS.find(p => p.test(lastLines))
+  hasError = !!matchedError
+  if (matchedError) errorReason = matchedError.source
 
   return {
     isActive: false, // Determined by activity timestamp
     isWaiting,
     isBusy,
-    hasError
+    hasError,
+    waitingReason,
+    errorReason
   }
 }
 

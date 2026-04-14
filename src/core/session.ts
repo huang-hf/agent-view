@@ -43,6 +43,9 @@ function generateTitle(): string {
 }
 
 const LOCAL_WAITING_EXIT_GRACE_POLLS = 2
+const CODEX_WAITING_STICKY_MS = 3000
+const CODEX_WAITING_IGNORE_AFTER_CONFIRM_MS = 3000
+const MAX_DEBUG_SNIPPET_LENGTH = 240
 
 function deriveLocalSessionStatus(status: tmux.ToolStatus, isActive: boolean): SessionStatus {
   if (status.isWaiting) return "waiting"
@@ -51,22 +54,48 @@ function deriveLocalSessionStatus(status: tmux.ToolStatus, isActive: boolean): S
   return "idle"
 }
 
-function stabilizeWaitingTransition(
+function compactDebugSnippet(text: string): string {
+  return text
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(-MAX_DEBUG_SNIPPET_LENGTH)
+}
+
+export function stabilizeWaitingTransition(
   previous: SessionStatus,
   candidate: SessionStatus,
-  polls: number,
-  gracePolls = LOCAL_WAITING_EXIT_GRACE_POLLS
-): { next: SessionStatus; polls: number } {
+  exitPolls: number
+): { next: SessionStatus; exitPolls: number } {
   if (candidate === "waiting") {
-    return { next: "waiting", polls: 0 }
+    return { next: "waiting", exitPolls: 0 }
   }
+
   if (previous === "waiting" && (candidate === "idle" || candidate === "running")) {
-    const nextPolls = polls + 1
-    if (nextPolls < gracePolls) {
-      return { next: "waiting", polls: nextPolls }
+    const nextExitPolls = exitPolls + 1
+    if (nextExitPolls < LOCAL_WAITING_EXIT_GRACE_POLLS) {
+      return { next: "waiting", exitPolls: nextExitPolls }
     }
   }
-  return { next: candidate, polls: 0 }
+  return { next: candidate, exitPolls: 0 }
+}
+
+export function reconcileCodexWaitingCandidate(
+  previous: SessionStatus,
+  candidate: SessionStatus,
+  lastSeenAt: number,
+  ignoreUntil: number,
+  now = Date.now()
+): { candidate: SessionStatus; lastSeenAt: number } {
+  if (ignoreUntil > now && candidate === "waiting") {
+    return { candidate: "running", lastSeenAt }
+  }
+  if (candidate === "waiting") {
+    return { candidate, lastSeenAt: now }
+  }
+  if (previous === "waiting" && lastSeenAt > 0 && now - lastSeenAt < CODEX_WAITING_STICKY_MS) {
+    return { candidate: "waiting", lastSeenAt }
+  }
+  return { candidate, lastSeenAt: 0 }
 }
 
 export class SessionManager {
@@ -75,16 +104,28 @@ export class SessionManager {
   private memoryMap = new Map<string, number>() // sessionId → KB
   private _recentAutoHibernated: { id: string; title: string; idleMinutes: number }[] = []
   private localWaitingExitPolls = new Map<string, number>() // sessionId -> consecutive non-waiting polls
+  private codexWaitingSeenAt = new Map<string, number>() // sessionId -> last waiting seen timestamp
+  private codexWaitingIgnoreUntil = new Map<string, number>() // sessionId -> ignore waiting until timestamp
 
   private stabilizeLocalWaitingStatus(
-    sessionId: string,
-    previous: SessionStatus,
+    session: Session,
     candidate: SessionStatus
   ): SessionStatus {
-    const currentPolls = this.localWaitingExitPolls.get(sessionId) || 0
-    const resolved = stabilizeWaitingTransition(previous, candidate, currentPolls)
-    if (resolved.polls > 0) this.localWaitingExitPolls.set(sessionId, resolved.polls)
-    else this.localWaitingExitPolls.delete(sessionId)
+    if (session.tool === "codex") {
+      const now = Date.now()
+      const seenAt = this.codexWaitingSeenAt.get(session.id) || 0
+      const ignoreUntil = this.codexWaitingIgnoreUntil.get(session.id) || 0
+      const codex = reconcileCodexWaitingCandidate(session.status, candidate, seenAt, ignoreUntil, now)
+      candidate = codex.candidate
+      if (codex.lastSeenAt > 0) this.codexWaitingSeenAt.set(session.id, codex.lastSeenAt)
+      else this.codexWaitingSeenAt.delete(session.id)
+      if (ignoreUntil > 0 && ignoreUntil <= now) this.codexWaitingIgnoreUntil.delete(session.id)
+    }
+
+    const exitPolls = this.localWaitingExitPolls.get(session.id) || 0
+    const resolved = stabilizeWaitingTransition(session.status, candidate, exitPolls)
+    if (resolved.exitPolls > 0) this.localWaitingExitPolls.set(session.id, resolved.exitPolls)
+    else this.localWaitingExitPolls.delete(session.id)
     return resolved.next
   }
 
@@ -152,10 +193,31 @@ export class SessionManager {
         const output = await tmux.capturePane(session.tmuxSession, {
           startLine: -100
         })
-        const status = tmux.parseToolStatus(output, session.tool)
+        const statusDebug = tmux.parseToolStatusDebug(output, session.tool)
+        const status: tmux.ToolStatus = statusDebug
 
         const candidate = deriveLocalSessionStatus(status, isActive)
-        const next = this.stabilizeLocalWaitingStatus(session.id, session.status, candidate)
+        const next = this.stabilizeLocalWaitingStatus(session, candidate)
+        if (session.tool === "codex" && (session.status !== next || candidate === "waiting" || next === "waiting")) {
+          log("local status decision", {
+            sessionId: session.id,
+            title: session.title,
+            tmuxSession: session.tmuxSession,
+            previous: session.status,
+            candidate,
+            next,
+            isActive,
+            isWaiting: status.isWaiting,
+            isBusy: status.isBusy,
+            hasError: status.hasError,
+            waitingReason: statusDebug.waitingReason,
+            errorReason: statusDebug.errorReason,
+            ignoreUntil: this.codexWaitingIgnoreUntil.get(session.id) || 0,
+            seenAt: this.codexWaitingSeenAt.get(session.id) || 0,
+            exitPolls: this.localWaitingExitPolls.get(session.id) || 0,
+            snippet: compactDebugSnippet(output)
+          })
+        }
         storage.writeStatus(session.id, next, session.tool)
 
         if (next === "idle") {
@@ -480,6 +542,13 @@ export class SessionManager {
     const before = storage.getSession(sessionId)
     await this.sendMessage(sessionId, message)
     if (before?.status === "waiting") {
+      if (before.tool === "codex") {
+        this.codexWaitingSeenAt.delete(sessionId)
+        this.codexWaitingIgnoreUntil.set(
+          sessionId,
+          Date.now() + CODEX_WAITING_IGNORE_AFTER_CONFIRM_MS
+        )
+      }
       storage.writeStatus(sessionId, "running", before.tool)
       storage.touch()
     }
