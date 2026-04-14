@@ -47,7 +47,8 @@ function text(data: string, status = 200): Response {
 function html(data: string): Response {
   return new Response(data, {
     headers: {
-      "content-type": "text/html; charset=utf-8"
+      "content-type": "text/html; charset=utf-8",
+      "cache-control": "no-store"
     }
   })
 }
@@ -208,6 +209,25 @@ export async function startWebServer(options: WebServerOptions): Promise<void> {
         }))
 
         return json([...localItems, ...remoteItems])
+      }
+
+      if (pathname.startsWith("/api/sessions/") && pathname.endsWith("/acknowledge") && req.method === "POST") {
+        const key = getIdFromPath(pathname, "/acknowledge")
+        if (!key) return text("invalid session path", 400)
+
+        const parsed = parseSessionKey(key)
+        if (!parsed) return text("invalid session id", 400)
+
+        if (parsed.kind === "local") {
+          manager.acknowledge(parsed.id)
+          return json({ ok: true })
+        }
+
+        const remotes = await remoteManager.fetchAllSessions(false)
+        const remoteSession = remotes.find((s) => s.remoteName === parsed.remoteName && s.id === parsed.id)
+        if (!remoteSession) return text("remote session not found", 404)
+        await remoteManager.acknowledgeSession(remoteSession)
+        return json({ ok: true })
       }
 
       if (pathname.startsWith("/api/sessions/") && pathname.endsWith("/transcript")) {

@@ -4,6 +4,7 @@
 
 export { Dialog, DialogProvider, useDialog, scrollDialogBy, scrollDialogTo } from "./dialog"
 export { DialogSelect, type DialogSelectOption, type DialogSelectProps } from "./dialog-select"
+export { DialogInput, type DialogInputProps } from "./dialog-input"
 export { DialogHeader } from "./dialog-header"
 export { DialogFooter } from "./dialog-footer"
 export { ActionButton } from "./action-button"

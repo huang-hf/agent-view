@@ -6,43 +6,64 @@
   <title>Agent View Mobile</title>
   <style>
     :root {
-      --bg: #0b1220;
-      --panel: #111b2f;
-      --panel-soft: #0f1728;
+      --bg: #081225;
+      --panel: #0f1c35;
+      --panel-soft: #132445;
       --text: #ecf3ff;
-      --muted: #9eb0cf;
-      --accent: #39d98a;
+      --muted: #a8bbdc;
+      --accent: #32d7a2;
       --warn: #ffcb66;
       --error: #ff7a8a;
-      --border: #223150;
+      --border: #2b3f66;
+      --blue-1: #3b82f6;
+      --blue-2: #60a5fa;
+      --cyan-1: #22d3ee;
     }
 
     * { box-sizing: border-box; }
+    html, body {
+      width: 100%;
+      max-width: 100%;
+      overflow-x: hidden;
+      -webkit-text-size-adjust: 100%;
+      text-size-adjust: 100%;
+    }
+
     body {
       margin: 0;
       font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 16px;
       color: var(--text);
-      background: radial-gradient(1200px 700px at 5% -5%, #1f355f 0%, var(--bg) 45%);
+      background:
+        radial-gradient(900px 500px at 0% -10%, rgba(59,130,246,0.35) 0%, rgba(59,130,246,0) 55%),
+        radial-gradient(1000px 600px at 100% -20%, rgba(34,211,238,0.24) 0%, rgba(34,211,238,0) 58%),
+        linear-gradient(180deg, #0a1730 0%, var(--bg) 45%, #060d1d 100%);
       min-height: 100vh;
     }
 
     .app {
+      width: 100%;
       max-width: 980px;
       margin: 0 auto;
       padding: 12px 12px 18px;
       display: grid;
       gap: 12px;
+      overflow-x: hidden;
     }
 
     .card {
-      background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
+      background:
+        linear-gradient(135deg, rgba(96,165,250,0.12), rgba(50,215,162,0.05) 38%, rgba(255,255,255,0.02) 85%),
+        linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015));
       border: 1px solid var(--border);
       border-radius: 14px;
       padding: 12px;
-      box-shadow: 0 8px 28px rgba(0,0,0,0.28);
+      box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+      min-width: 0;
     }
 
-    .row { display: flex; align-items: center; gap: 8px; }
+    .row { display: flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%; }
+    .row > * { min-width: 0; }
     .between { justify-content: space-between; }
     .stack { display: grid; gap: 8px; }
 
@@ -53,9 +74,14 @@
       background: var(--panel-soft);
       color: var(--text);
       border-radius: 10px;
-      padding: 8px 12px;
+      padding: 10px 14px;
+      font-size: 14px;
+      line-height: 1.2;
       font-weight: 600;
+      min-height: 42px;
       cursor: pointer;
+      max-width: 100%;
+      touch-action: manipulation;
     }
 
     button.primary {
@@ -79,6 +105,8 @@
 
     .switcher-btn {
       max-width: 70vw;
+      min-width: 0;
+      flex: 1 1 220px;
       text-align: left;
       white-space: nowrap;
       overflow: hidden;
@@ -96,6 +124,8 @@
       padding: 3px 8px;
       font-size: 12px;
       color: var(--muted);
+      flex-shrink: 0;
+      background: rgba(255,255,255,0.03);
     }
 
     .dot {
@@ -110,27 +140,104 @@
     .status-waiting .dot { background: var(--warn); }
     .status-error .dot { background: var(--error); }
 
+    .status-pill.status-running {
+      border-color: rgba(50,215,162,0.5);
+      background: rgba(50,215,162,0.12);
+      color: #9bf1d2;
+    }
+    .status-pill.status-waiting {
+      border-color: rgba(255,203,102,0.55);
+      background: rgba(255,203,102,0.14);
+      color: #ffe3a7;
+    }
+    .status-pill.status-error {
+      border-color: rgba(255,122,138,0.55);
+      background: rgba(255,122,138,0.14);
+      color: #ffd1d8;
+    }
+
     .transcript {
-      background: #0a1120;
+      background:
+        linear-gradient(180deg, rgba(96,165,250,0.06), rgba(96,165,250,0)),
+        #0a1222;
       border: 1px solid var(--border);
       border-radius: 10px;
       height: 58vh;
       overflow: auto;
+      overflow-x: hidden;
       padding: 10px;
       font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
       white-space: pre-wrap;
       word-break: break-word;
+      overflow-wrap: anywhere;
+      max-width: 100%;
+    }
+
+    .transcript-line {
+      display: block;
+    }
+
+    .transcript-line.is-command {
+      color: #8ec5ff;
+    }
+
+    .transcript-line.is-status-good {
+      color: #91e7be;
+    }
+
+    .transcript-line.is-status-bad {
+      color: #ff9aa7;
+    }
+
+    .transcript-line.is-status-warn {
+      color: #ffd98b;
+    }
+
+    .transcript-line.is-prompt {
+      color: #7dd3fc;
+      font-weight: 700;
+    }
+
+    .transcript-line.is-muted {
+      color: #7f93b6;
+    }
+
+    .transcript-line.is-divider {
+      color: #5f7398;
+    }
+
+    .transcript-line.is-note {
+      color: #c4d7f5;
+      font-style: italic;
     }
 
     .input {
       width: 100%;
+      max-width: 100%;
       border: 1px solid var(--border);
       border-radius: 10px;
       background: #0c1628;
       color: var(--text);
       padding: 10px;
-      font: inherit;
+      font: 16px/1.4 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       min-height: 76px;
+    }
+
+    @media (pointer: coarse) {
+      button {
+        min-height: 46px;
+        font-size: 15px;
+        padding: 12px 14px;
+      }
+
+      .status-pill {
+        font-size: 13px;
+      }
+
+      .hint,
+      .meta {
+        font-size: 13px;
+      }
     }
 
     .hint { color: var(--muted); font-size: 12px; }
@@ -153,7 +260,9 @@
       bottom: auto;
       max-height: calc(100vh - 16px);
       overflow: auto;
-      background: #0b1525;
+      background:
+        linear-gradient(180deg, rgba(96,165,250,0.1), rgba(96,165,250,0) 18%),
+        #0b1525;
       border: 1px solid var(--border);
       border-radius: 16px;
       padding: 12px;
@@ -173,8 +282,10 @@
       border: none;
       border-bottom: 1px solid rgba(255,255,255,0.04);
       border-radius: 0;
-      background: #102037;
-      padding: 10px;
+      background: linear-gradient(135deg, rgba(59,130,246,0.28), rgba(34,211,238,0.14));
+      padding: 12px;
+      min-height: 48px;
+      font-size: 15px;
     }
 
     .group-sessions { display: grid; }
@@ -185,53 +296,153 @@
       border: none;
       border-top: 1px solid rgba(255,255,255,0.04);
       border-radius: 0;
-      padding: 10px;
-      background: transparent;
+      padding: 12px;
+      min-height: 48px;
+      font-size: 15px;
+      background: rgba(255,255,255,0.01);
     }
 
-    .session-row.active { background: #152944; }
+    .session-row.active {
+      background: linear-gradient(135deg, rgba(59,130,246,0.33), rgba(34,211,238,0.12));
+      color: #eaf4ff;
+    }
 
     .inbox-item {
       width: 100%;
       text-align: left;
-      padding: 10px;
+      padding: 12px;
+      min-height: 56px;
+      font-size: 15px;
       border: 1px solid var(--border);
       border-radius: 10px;
-      background: #0e1a2a;
+      background: linear-gradient(135deg, rgba(255,203,102,0.18), rgba(255,122,138,0.08) 55%, rgba(255,255,255,0.02));
       margin-top: 8px;
+    }
+
+    .inbox-clear {
+      flex: 0 0 auto;
+      min-height: 32px;
+      padding: 6px 10px;
+      font-size: 12px;
+      background: rgba(255,255,255,0.04);
+    }
+
+    .topbar {
+      flex-wrap: wrap;
+      align-items: flex-start;
+    }
+
+    .topbar-actions {
+      margin-left: auto;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    #session-title {
+      min-width: 0;
+      max-width: 70vw;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      display: inline-block;
+    }
+
+    #session-meta {
+      overflow-wrap: anywhere;
+    }
+
+    .session-head {
+      flex-wrap: wrap;
+      row-gap: 8px;
+    }
+
+    .session-head #session-title {
+      flex: 1 1 220px;
+      max-width: 100%;
+    }
+
+    .session-actions {
+      flex-wrap: wrap;
+    }
+
+    .session-actions button {
+      flex: 1 1 220px;
+    }
+
+    @media (max-width: 760px) {
+      .app {
+        padding: 10px 10px 16px;
+        gap: 10px;
+      }
+
+      .card {
+        padding: 10px;
+      }
+
+      .topbar-actions {
+        width: 100%;
+        margin-left: 0;
+        justify-content: stretch;
+      }
+
+      .topbar-actions button {
+        flex: 1 1 0;
+      }
+
+      .switcher-btn {
+        max-width: 100%;
+        flex-basis: 100%;
+      }
+
+      .between {
+        flex-wrap: wrap;
+        row-gap: 8px;
+      }
+
+      #session-title {
+        max-width: 100%;
+      }
+
+      .session-actions button {
+        flex: 1 1 100%;
+      }
+
+      .modal-panel {
+        top: env(safe-area-inset-top, 0px);
+        max-height: calc(100vh - env(safe-area-inset-top, 0px));
+      }
     }
   </style>
 </head>
 <body>
   <main class="app">
-    <section class="card row between">
+    <section class="card row between topbar">
       <div>
         <h1>Agent View Mobile</h1>
         <div class="hint">Focus-first view with group switcher</div>
       </div>
-      <div class="row">
-        <button id="btn-switcher" class="switcher-btn">Select Session</button>
+      <div class="row topbar-actions">
+        <button id="btn-switcher" class="switcher-btn">Session</button>
         <button id="btn-notify">Enable Notifications</button>
         <button id="btn-test-notify">Test Notification</button>
-        <button id="btn-refresh">Refresh</button>
       </div>
     </section>
 
     <section class="card">
-      <div class="row between">
+      <div class="row between session-head">
         <strong id="session-title">No session selected</strong>
         <span class="status-pill" id="session-status-pill"><span class="dot"></span><span id="session-status-text">idle</span></span>
       </div>
       <div class="meta" id="session-meta">-</div>
       <div class="hint" style="margin:8px 0;">Scroll to top to load older messages.</div>
       <div id="transcript" class="transcript"></div>
-      <div class="row" style="margin-top: 10px;">
+      <div class="row session-actions" style="margin-top: 10px;">
         <button id="btn-confirm" class="warning" title="Send Enter for waiting prompt">Quick Confirm</button>
         <button id="btn-interrupt" class="danger" title="Send Esc Esc">Interrupt (Esc Esc)</button>
       </div>
       <textarea id="message" class="input" placeholder="Send instructions to this session..."></textarea>
       <div class="row between" style="margin-top: 8px;">
-        <span class="hint">Cmd/Ctrl+Enter to send</span>
+        <span class="hint">Enter to send · Shift+Enter for new line</span>
         <button id="btn-send" class="primary">Send</button>
       </div>
     </section>
@@ -254,6 +465,7 @@
 
   <script>
     const STORAGE_LAST_SESSION_KEY = "agent_view_last_session"
+    const STORAGE_LAST_NOTIFIED_INBOX_KEY = "agent_view_last_notified_inbox"
 
     const state = {
       sessions: [],
@@ -265,6 +477,7 @@
       unreadInbox: 0,
       transcriptLines: [],
       switcherGroupKey: null,
+      initialized: false,
     }
 
     let swRegistration = null
@@ -285,7 +498,6 @@
       statusPill: document.getElementById("session-status-pill"),
       statusText: document.getElementById("session-status-text"),
 
-      btnRefresh: document.getElementById("btn-refresh"),
       btnSend: document.getElementById("btn-send"),
       btnConfirm: document.getElementById("btn-confirm"),
       btnInterrupt: document.getElementById("btn-interrupt"),
@@ -318,8 +530,150 @@
       return out
     }
 
+    function stripUnsupportedAnsi(input) {
+      return String(input || "")
+        .replace(/\x1b\][^\x07]*(\x07|\x1b\\)/g, "")
+        .replace(/\x1b\[[0-9;?]*[A-IK-Za-ik-z]/g, "")
+    }
+
+    function cssFromAnsiState(state) {
+      const styles = []
+      if (state.bold) styles.push("font-weight:700")
+      if (state.dim) styles.push("opacity:0.78")
+      if (state.italic) styles.push("font-style:italic")
+      if (state.underline) styles.push("text-decoration:underline")
+      if (state.fg) styles.push(`color:${state.fg}`)
+      if (state.bg) styles.push(`background:${state.bg}`)
+      return styles.join(";")
+    }
+
+    function parseSgrCodes(codes, state) {
+      const fgMap = {
+        30: "#111827", 31: "#ef4444", 32: "#22c55e", 33: "#f59e0b",
+        34: "#3b82f6", 35: "#d946ef", 36: "#06b6d4", 37: "#e5e7eb",
+        90: "#9ca3af", 91: "#f87171", 92: "#4ade80", 93: "#fbbf24",
+        94: "#60a5fa", 95: "#e879f9", 96: "#22d3ee", 97: "#ffffff",
+      }
+      const bgMap = {
+        40: "#111827", 41: "#7f1d1d", 42: "#14532d", 43: "#78350f",
+        44: "#1e3a8a", 45: "#701a75", 46: "#164e63", 47: "#e5e7eb",
+        100: "#374151", 101: "#ef4444", 102: "#22c55e", 103: "#f59e0b",
+        104: "#3b82f6", 105: "#d946ef", 106: "#06b6d4", 107: "#ffffff",
+      }
+
+      for (let i = 0; i < codes.length; i++) {
+        const code = codes[i]
+        if (code === 0) {
+          state.fg = null
+          state.bg = null
+          state.bold = false
+          state.dim = false
+          state.italic = false
+          state.underline = false
+          continue
+        }
+        if (code === 1) state.bold = true
+        else if (code === 2) state.dim = true
+        else if (code === 3) state.italic = true
+        else if (code === 4) state.underline = true
+        else if (code === 22) { state.bold = false; state.dim = false }
+        else if (code === 23) state.italic = false
+        else if (code === 24) state.underline = false
+        else if (code === 39) state.fg = null
+        else if (code === 49) state.bg = null
+        else if (fgMap[code]) state.fg = fgMap[code]
+        else if (bgMap[code]) state.bg = bgMap[code]
+        else if (code === 38 && codes[i + 1] === 2 && i + 4 < codes.length) {
+          state.fg = `rgb(${codes[i + 2]},${codes[i + 3]},${codes[i + 4]})`
+          i += 4
+        } else if (code === 48 && codes[i + 1] === 2 && i + 4 < codes.length) {
+          state.bg = `rgb(${codes[i + 2]},${codes[i + 3]},${codes[i + 4]})`
+          i += 4
+        }
+      }
+    }
+
+    function ansiToHtml(input) {
+      const text = stripUnsupportedAnsi(input)
+      const sgrRe = /\x1b\[([0-9;]*)m/g
+      const state = { fg: null, bg: null, bold: false, dim: false, italic: false, underline: false }
+      let out = ""
+      let lastIndex = 0
+      let match = null
+
+      while ((match = sgrRe.exec(text)) !== null) {
+        const chunk = text.slice(lastIndex, match.index)
+        if (chunk) {
+          const style = cssFromAnsiState(state)
+          const safe = esc(chunk)
+          out += style ? `<span style="${style}">${safe}</span>` : safe
+        }
+        const rawCodes = (match[1] || "").split(";").filter(Boolean).map((n) => Number.parseInt(n, 10))
+        parseSgrCodes(rawCodes.length ? rawCodes : [0], state)
+        lastIndex = match.index + match[0].length
+      }
+
+      const tail = text.slice(lastIndex)
+      if (tail) {
+        const style = cssFromAnsiState(state)
+        const safe = esc(tail)
+        out += style ? `<span style="${style}">${safe}</span>` : safe
+      }
+      return out
+    }
+
+    function transcriptLineClass(line) {
+      const text = String(line || "")
+      const trimmed = text.trim()
+      if (!trimmed) return "transcript-line"
+      if (/^[-_=─━]{20,}$/.test(trimmed)) return "transcript-line is-divider"
+      if (/^(⏺|Bash\(|curl\b|❯|>|[$#]\s)/.test(trimmed)) return "transcript-line is-command"
+      if (/(\.\.\. \+\d+ lines|\(ctrl\+o to expand\)|for shortcuts|new task\?)/i.test(trimmed)) return "transcript-line is-muted"
+      if (/\b(status:\s*(live|running|ok|approved|upcoming|success)|approved\b|created:)\b/i.test(trimmed)) return "transcript-line is-status-good"
+      if (/\b(error|failed|exception|quota|cancelled|denied|insufficient|invalid|stopped|churned)\b/i.test(trimmed)) return "transcript-line is-status-bad"
+      if (/\b(waiting|pending|warning|warn|retry|timeout)\b/i.test(trimmed)) return "transcript-line is-status-warn"
+      if (/^[?].*|^\?\s/.test(trimmed)) return "transcript-line is-prompt"
+      if (/^(note:|tip:|hint:)/i.test(trimmed)) return "transcript-line is-note"
+      return "transcript-line"
+    }
+
+    function semanticTranscriptHtml(lines) {
+      return lines
+        .map((line) => {
+          const cls = transcriptLineClass(line)
+          return `<span class="${cls}">${ansiToHtml(line)}</span>`
+        })
+        .join("\n")
+    }
+
     function sessionPath(id) {
       return encodeURIComponent(id)
+    }
+
+    function getInboxNotifySignature(inbox) {
+      return inbox
+        .map(item => `${item.id}:${item.status}`)
+        .sort()
+        .join("|")
+    }
+
+    function isDuplicateInboxNotification(signature) {
+      try {
+        const raw = localStorage.getItem(STORAGE_LAST_NOTIFIED_INBOX_KEY)
+        if (!raw) return false
+        const parsed = JSON.parse(raw)
+        if (!parsed || typeof parsed.signature !== "string" || typeof parsed.at !== "number") return false
+        return parsed.signature === signature && (Date.now() - parsed.at) < 60000
+      } catch {
+        return false
+      }
+    }
+
+    function markInboxNotification(signature) {
+      localStorage.setItem(
+        STORAGE_LAST_NOTIFIED_INBOX_KEY,
+        JSON.stringify({ signature, at: Date.now() })
+      )
     }
 
     async function api(path, options = {}) {
@@ -418,14 +772,8 @@
     }
 
     function updateTopSwitcherLabel() {
-      const selected = state.sessions.find(s => s.id === state.selectedId)
       const pending = state.inbox.length
-      if (!selected) {
-        el.btnSwitcher.textContent = pending > 0 ? `Select Session · ${pending} pending` : "Select Session"
-        return
-      }
-      const title = `${selected.groupPath} ▸ ${selected.title}`
-      el.btnSwitcher.textContent = pending > 0 ? `${title} · ${pending} pending` : title
+      el.btnSwitcher.textContent = pending > 0 ? `Session (${pending})` : "Session"
     }
 
     function renderSwitcher() {
@@ -447,13 +795,18 @@
           el.switcherInbox.innerHTML = `
             <div class="meta" style="margin-top:8px;">Inbox (${state.inbox.length})</div>
             ${state.inbox.map(i => `
-              <button class="inbox-item" data-open-session="${esc(i.id)}">
+              <div class="inbox-item">
                 <div class="row between">
-                  <strong>${esc(i.title)}</strong>
-                  <span class="meta">${esc(i.status)}</span>
+                  <button style="flex:1 1 auto; text-align:left; background:transparent; border:none; padding:0; min-height:0;" data-open-session="${esc(i.id)}">
+                    <strong>${esc(i.title)}</strong>
+                  </button>
+                  <div class="row" style="flex:0 0 auto;">
+                    <span class="meta">${esc(i.status)}</span>
+                    <button class="inbox-clear" data-ack-session="${esc(i.id)}">Clear</button>
+                  </div>
                 </div>
                 <div class="meta">${esc(i.tool)} · ${esc(i.groupPath)}</div>
-              </button>
+              </div>
             `).join("")}
           `
         }
@@ -487,7 +840,16 @@
       el.switcherModal.querySelectorAll("[data-open-session]").forEach(node => {
         node.addEventListener("click", async () => {
           await selectSession(node.dataset.openSession)
+          await acknowledgeSession(node.dataset.openSession)
           closeSwitcher()
+        })
+      })
+
+      el.switcherModal.querySelectorAll("[data-ack-session]").forEach(node => {
+        node.addEventListener("click", async (event) => {
+          event.stopPropagation()
+          await acknowledgeSession(node.dataset.ackSession)
+          renderSwitcher()
         })
       })
 
@@ -527,10 +889,15 @@
         return
       }
       const normalized = normalizeTranscriptLines(state.transcriptLines)
-      el.transcript.innerHTML = esc(normalized.join("\n"))
+      el.transcript.innerHTML = semanticTranscriptHtml(normalized)
     }
 
-    async function loadTranscriptPage(reset = false) {
+    function isTranscriptNearBottom() {
+      const remaining = el.transcript.scrollHeight - el.transcript.scrollTop - el.transcript.clientHeight
+      return remaining < 48
+    }
+
+    async function loadTranscriptPage(reset = false, stickToBottom = false) {
       if (!state.selectedId || state.loading) return
       state.loading = true
       try {
@@ -539,7 +906,9 @@
         if (reset) {
           state.transcriptLines = data.lines
           renderTranscript()
-          el.transcript.scrollTop = el.transcript.scrollHeight
+          if (stickToBottom) {
+            el.transcript.scrollTop = el.transcript.scrollHeight
+          }
         } else {
           const prevHeight = el.transcript.scrollHeight
           state.transcriptLines = [...data.lines, ...state.transcriptLines]
@@ -562,7 +931,7 @@
       state.transcriptLines = []
       updateHeader()
       updateTopSwitcherLabel()
-      await loadTranscriptPage(true)
+      await loadTranscriptPage(true, true)
     }
 
     async function sendMessage() {
@@ -573,19 +942,25 @@
         method: "POST",
         body: JSON.stringify({ message }),
       })
-      await loadTranscriptPage(true)
+      await loadTranscriptPage(true, true)
+    }
+
+    async function acknowledgeSession(id) {
+      if (!id) return
+      await api(`/api/sessions/${sessionPath(id)}/acknowledge`, { method: "POST" })
+      await refreshAll(false)
     }
 
     async function quickConfirm() {
       if (!state.selectedId) return
       await api(`/api/sessions/${sessionPath(state.selectedId)}/confirm`, { method: "POST" })
-      await refreshAll()
+      await refreshAll(true)
     }
 
     async function interruptSession() {
       if (!state.selectedId) return
       await api(`/api/sessions/${sessionPath(state.selectedId)}/interrupt`, { method: "POST" })
-      await refreshAll()
+      await refreshAll(true)
     }
 
     async function sendTestNotification() {
@@ -604,7 +979,7 @@
       if (!ok) alert("Notification blocked by browser policy")
     }
 
-    async function refreshAll() {
+    async function refreshAll(forceTranscript = false) {
       const [sessions, inbox] = await Promise.all([
         api("/api/sessions"),
         api("/api/inbox"),
@@ -637,14 +1012,29 @@
       updateHeader()
 
       if (state.selectedId) {
-        await loadTranscriptPage(true)
+        const shouldRefreshTranscript =
+          forceTranscript ||
+          state.transcriptLines.length === 0 ||
+          isTranscriptNearBottom()
+        if (shouldRefreshTranscript) {
+          await loadTranscriptPage(true, true)
+        }
+      }
+
+      if (!state.initialized) {
+        state.initialized = true
+        return
       }
 
       if (window.Notification && Notification.permission === "granted" && state.unreadInbox > previousInbox) {
-        await notifySystem("Agent View", `${state.unreadInbox} session(s) need attention`, {
-          tag: "agent-view-inbox",
-          url: location.pathname + location.hash
-        })
+        const signature = getInboxNotifySignature(state.inbox)
+        if (!isDuplicateInboxNotification(signature)) {
+          const sent = await notifySystem("Agent View", `${state.unreadInbox} session(s) need attention`, {
+            tag: "agent-view-inbox",
+            url: location.pathname + location.hash
+          })
+          if (sent) markInboxNotification(signature)
+        }
       }
     }
 
@@ -653,7 +1043,6 @@
       await loadTranscriptPage(false)
     })
 
-    el.btnRefresh.addEventListener("click", refreshAll)
     el.btnSend.addEventListener("click", sendMessage)
     el.btnConfirm.addEventListener("click", quickConfirm)
     el.btnInterrupt.addEventListener("click", interruptSession)
@@ -669,10 +1058,10 @@
     })
 
     el.message.addEventListener("keydown", async (event) => {
-      if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-        event.preventDefault()
-        await sendMessage()
-      }
+      if (event.key !== "Enter") return
+      if (event.shiftKey) return
+      event.preventDefault()
+      await sendMessage()
     })
 
     let escPressedAt = 0
@@ -699,7 +1088,7 @@
     registerServiceWorker().catch(console.error)
     updateNotifyButtonText()
     refreshAll().catch(console.error)
-    setInterval(() => refreshAll().catch(console.error), 2500)
+    setInterval(() => refreshAll(false).catch(console.error), 2500)
   </script>
 </body>
 </html>

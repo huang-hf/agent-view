@@ -125,8 +125,8 @@ export function InputAutocomplete(props: InputAutocompleteProps) {
       return
     }
 
-    if (evt.name === "return") {
-      // Enter accepts the current selection if any
+    if (evt.name === "return" && !evt.shift) {
+      // Enter accepts the current selection if any (Shift+Enter is ignored for line breaks)
       const idx = selectedIdx()
       const suggestions = visibleSuggestions()
       if (idx >= 0 && idx < suggestions.length) {
