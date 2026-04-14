@@ -119,10 +119,6 @@ export interface Recent {
   projectPath: string  // Working directory
   tool: Tool           // Tool type
   groupPath?: string   // Target group (created if missing)
-  // Remote session fields (optional)
-  remoteHost?: string  // SSH host for remote sessions
-  remoteAvPath?: string // av binary path on remote
-  command?: string     // Custom command (when tool === "custom")
 }
 
 export interface RemoteHost {
@@ -140,10 +136,6 @@ export interface Config {
   shortcuts?: Shortcut[]
   recents?: Recent[]
   remoteHosts?: RemoteHost[]
-}
-
-export function isRemoteSession(session: Session): session is RemoteSession {
-  return "remoteName" in session && "remoteHost" in session
 }
 
 export function getToolCommand(tool: Tool, customCmd?: string): string {

@@ -34,9 +34,10 @@ When working with AI coding agents, you often need to run multiple agents on dif
 
 - **Multi-Agent Dashboard** - View all your AI coding assistant sessions at a glance with real-time status indicators
 - **Smart Notifications** - Get notified when an agent finishes a task or needs your input, so you can context-switch efficiently
-- **Session Management** - Create, stop, restart, and delete coding agent sessions with keyboard shortcuts
-- **Mobile Web UI** - Focus-first web client for phone usage with group/session switcher and remote support
-- **Git Worktree Integration** - Automatically create isolated git worktrees for each agent session, keeping your branches clean
+- **Mobile Web UI** - Focus-first web client for phone usage with inbox, transcript paging, and remote session support
+- **Session Management** - Create, stop, restart, delete, and duplicate coding agent sessions with keyboard shortcuts
+- **Git Worktree Integration** - Automatically create isolated git worktrees for each agent session, keeping your branches clean. Optionally sync with the latest remote branch before creating each worktree
+- **Remote SSH Sessions** - Manage AI agent sessions on remote servers via SSH, with automatic reconnection and connection health monitoring
 - **Tool Agnostic** - Works as a Claude Code manager, Gemini CLI orchestrator, OpenCode dashboard, or with any custom AI tool
 - **Keyboard-First** - Fully navigable terminal UI with keyboard shortcuts for maximum productivity
 - **Session Groups** - Organize sessions into groups by project or workflow
@@ -88,6 +89,17 @@ agent-view
 av
 ```
 
+### Run Headless Notify Watcher
+
+Use `av -r` to run a headless watcher that sends webhook notifications when a session enters `waiting` status.
+
+```bash
+av -r
+```
+
+For QQ Official Bot forwarding, a minimal relay service is included at `relay/` in this repository.
+See [`relay/README.md`](relay/README.md) for setup.
+
 ### Web UI (Mobile + Remote)
 
 Start the web server:
@@ -96,122 +108,30 @@ Start the web server:
 # Local only
 av --web --host 127.0.0.1 --port 4317 --no-serve
 
-# Expose on LAN/Tailscale (auto tailscale serve)
+# Expose on Tailscale/LAN
 av --web --host 0.0.0.0 --port 4317
 
-# Stable background web daemon
+# Background web daemon
 av --web --host 0.0.0.0 --port 4317 --daemon
 
-# Start TUI + ensure web backend + tailscale serve
-av --all --host 0.0.0.0 --port 4317
-
-# Force restart web backend (useful after UI updates)
-av --all --host 0.0.0.0 --port 4317 --restart-web
-```
-
-Then open `http://<host>:4317`.
-
-`av --all` is idempotent for web startup: if the web backend is already running on the target port, it will reuse it instead of restarting.
-Use `--restart-web` when you want to force-refresh the web backend process.
-Use `av --web --daemon` when you want a stable background web process managed by `av` itself instead of shell backgrounding.
-
-#### Web UI highlights
-
-- Focus-first single-session view optimized for phone usage
-- Top switcher with two-step `Group -> Session` navigation
-- Unified local + remote sessions in one UI
-- Inbox for waiting/error sessions
-- Paged transcript browsing (latest 1000 lines, scroll up to load older)
-- Quick actions:
-  - `Quick Confirm` (send Enter)
-  - `Interrupt (Esc Esc)` (send Escape twice)
-- Notifications with Service Worker support (`Enable Notifications` + `Test Notification`)
-
-#### Secure phone access with Tailscale
-
-If you already use Tailscale, you can expose the local web UI over your tailnet:
-
-```bash
-tailscale serve --bg 4317
-tailscale serve status
-```
-
-This gives you a tailnet-only HTTPS URL such as `https://<device>.<tailnet>.ts.net/`.
-
-### Mobile Access Scenario (Tailscale)
-
-Use this when you want to manage sessions from your phone outside working hours.
-
-#### 1) Prerequisites
-
-- Tailscale is installed and logged in on both PC and phone
-- PC and phone are in the same tailnet
-- `av` is running on your PC
-
-#### 2) Start Agent View Web UI on PC
-
-```bash
+# Start TUI and ensure the web backend is running
 av --all --host 0.0.0.0 --port 4317
 ```
 
-This starts TUI and ensures the web backend is running.  
-Why `0.0.0.0`: it allows access from your Tailscale interface (not only localhost).
+Web UI highlights:
 
-#### 3) Expose it as HTTPS inside tailnet
+- Single-session mobile layout optimized for phone usage
+- Inbox for waiting and error sessions
+- Paged transcript browsing with upward loading
+- Quick actions: `Confirm`, `Interrupt`, `Acknowledge`
+- Browser notifications via Service Worker
+- Unified local and remote session access
 
-`av --web` / `av --all` already try to run `tailscale serve --bg <port>` automatically.
-
-You can still verify manually:
+If you use Tailscale, `av --web` and `av --all` can automatically try `tailscale serve --bg <port>`.
+You can verify the published HTTPS URL with:
 
 ```bash
 tailscale serve status
-```
-
-You should get a URL like:
-
-```text
-https://<device>.<tailnet>.ts.net/
-```
-
-If Serve is not enabled on your tailnet, Tailscale will print an enable link. Open it once, then re-run `tailscale serve --bg 4317`.
-
-#### 4) Open on phone
-
-Open the HTTPS Tailscale URL in your mobile browser (Edge/Chrome/Safari).
-
-- Recommended: use the `https://...ts.net` URL from `tailscale serve status`
-- Not recommended for notifications: `http://<tailscale-ip>:4317`
-
-#### 5) Enable notifications
-
-In Web UI:
-
-1. Tap `Enable Notifications`
-2. Tap `Test Notification`
-
-If permission is granted, you should see a system notification banner.
-
-#### 6) Daily mobile workflow
-
-- Open top switcher -> choose `Group` -> choose `Session`
-- Use `Quick Confirm` to send Enter for waiting prompts
-- Use `Interrupt (Esc Esc)` to interrupt current execution
-- Scroll transcript upward to load older output (latest 1000 lines window)
-
-#### 7) Common issues
-
-- **No notification banner on phone**
-  - Verify site notification permission is `Allow`
-  - Verify system notification permission for browser app is enabled
-  - Use HTTPS Tailscale URL (`https://...ts.net`)
-- **Phone can't open URL**
-  - Check both devices are connected to Tailscale
-  - Verify web UI process is running on PC
-  - Re-check `tailscale serve status`
-- **Need to disable serve**
-
-```bash
-tailscale serve --https=443 off
 ```
 
 ### Keyboard Shortcuts
@@ -229,15 +149,14 @@ tailscale serve --https=443 off
 | `d` | Delete session or group |
 | `r` | Restart session |
 | `R` | Rename session or group |
-| `f` | Fork session |
-| `F` | Fork session with worktree |
+| `f` | Duplicate session (pre-fills new session dialog with same config) |
 | `s` | Open shortcuts dialog |
 | `g` | Create new group |
 | `m` | Move session to group |
 | `1-9` | Jump to group by number |
 | `Ctrl+K` | Open command palette |
 | `?` | Show help |
-| `q` | Quit |
+| `q` | Quit (with confirmation) |
 
 **Inside attached session:**
 
@@ -245,7 +164,7 @@ tailscale serve --https=443 off
 |-----|--------|
 | `Ctrl+K` | Detach and open command palette |
 | `Ctrl+T` | Toggle terminal pane (open/close) |
-| `Ctrl+O` | Toggle focus between panes |
+| `Ctrl+B` then `o` | Toggle focus between panes (tmux default) |
 | `Ctrl+Q` | Detach (return to dashboard) |
 
 ### Create a Session
@@ -256,6 +175,51 @@ tailscale serve --https=443 off
 4. Optionally enable git worktree for an isolated branch
 5. Press `Enter` to create and attach
 
+### Remote SSH Sessions
+
+Agent View can manage AI agent sessions on remote servers over SSH. Sessions run in tmux on the remote host and are monitored in real-time from your local dashboard.
+
+Add remote hosts to `~/.agent-view/config.json`:
+
+```json
+{
+  "remoteHosts": [
+    { "alias": "my-server" },
+    { "alias": "gpu-box", "label": "GPU" }
+  ]
+}
+```
+
+The `alias` must match an entry in your `~/.ssh/config`. When creating a new session, select the remote host from the host picker. Agent View will:
+- Establish a persistent SSH ControlMaster connection
+- Run tmux on the remote host using the same custom config
+- Automatically reconnect if the SSH connection drops
+- Detect connection health via SSH keepalives (auto-disconnect after 30s of silence)
+
+When attaching to a remote session, the terminal shows a brief status line before tmux renders, and a "connection lost" message if the SSH connection drops while attached.
+
+### Git Worktree Sync
+
+When working in teams, your local `main` branch can fall behind. Enable `syncRemoteBranch` to automatically fetch the latest remote commits and base every new worktree on them:
+
+```json
+{
+  "worktree": {
+    "syncRemoteBranch": "origin/main"
+  }
+}
+```
+
+With this set, every time you create a new session (or duplicate an existing one with `f`), Agent View will:
+1. Run `git fetch origin` against your repo
+2. Create the new worktree branch from `origin/main` instead of your local HEAD
+
+This ensures each new agent session starts from the latest code, without needing to manually pull first.
+
+You can configure this from the TUI: press `c` to open Settings → **Worktree: sync remote branch**. Presets include `origin/main`, `origin/master`, `origin/develop`, or any custom remote branch.
+
+> **Note:** The "Base on develop" checkbox in the new session dialog takes priority over `syncRemoteBranch` when checked.
+
 ### Configuration
 
 Create `~/.agent-view/config.json` to customize defaults:
@@ -263,9 +227,24 @@ Create `~/.agent-view/config.json` to customize defaults:
 ```json
 {
   "defaultTool": "claude",
+  "notify": {
+    "enabled": true,
+    "webhookUrl": "https://your-relay.example.com/agent-view/events",
+    "webhookTokenEnv": "AV_NOTIFY_TOKEN",
+    "cooldownSeconds": 300,
+    "tokenTtlSeconds": 300,
+    "pollIntervalMs": 500,
+    "actionServer": {
+      "enabled": true,
+      "host": "127.0.0.1",
+      "port": 5177,
+      "path": "/notify/action",
+      "secretEnv": "AV_NOTIFY_ACTION_SECRET"
+    }
+  },
   "worktree": {
     "defaultBaseBranch": "main",
-    "command": "git worktree"
+    "syncRemoteBranch": "origin/main"
   },
   "shortcuts": [
     {
@@ -286,6 +265,16 @@ Create `~/.agent-view/config.json` to customize defaults:
 }
 ```
 
+When `actionServer.enabled` is true, your relay can call back:
+
+- `POST http://127.0.0.1:5177/notify/action`
+- Headers: `x-av-secret: <value from AV_NOTIFY_ACTION_SECRET>`
+- Body: `{ "token": "<actionToken>", "action": "yes" | "no" }`
+
+Behavior:
+- `yes`: sends `yes` + Enter to the target waiting session
+- `no`: ignores this event (no input sent to the session)
+
 **Shortcuts** allow quick session creation from pre-configured templates. Press `s` to open the shortcuts dialog, or use direct keybinds (e.g., `\1` for `<leader>1`).
 
 | Shortcut Field | Required | Description |
@@ -297,34 +286,11 @@ Create `~/.agent-view/config.json` to customize defaults:
 | `keybind` | No | Direct keybind, e.g. `"<leader>1"`, `"ctrl+1"` |
 | `command` | No | Custom command (required when `tool` is `custom`) |
 
-## Remote Sessions
-
-Manage AI coding sessions running on remote machines (dev boxes, cloud VMs, etc.) from your local Agent View dashboard.
-
-### Setup
-
-1. Install `av` on the remote machine
-2. Ensure SSH access is configured (key-based auth recommended)
-3. Press `Shift+N` to create a remote session
-
-### Creating Remote Sessions
-
-Press `Shift+N` to open the remote session wizard:
-
-1. **SSH Host** - Enter the SSH destination (e.g., `user@hostname` or an SSH config name)
-2. **av Path** - Path to `av` binary on remote (default: `av`)
-3. **Tool** - Select the AI tool to use
-4. **Project Path** - Working directory on the remote machine
-5. **Title** - Optional session name
-
-Values are remembered for next time.
-
 ## Requirements
 
 - [Bun](https://bun.sh) runtime
 - [tmux](https://github.com/tmux/tmux) for session management
 - At least one AI coding tool installed (claude, gemini, opencode, etc.)
-- For remote sessions: SSH access to remote host with `av` installed
 
 ## Acknowledgments
 

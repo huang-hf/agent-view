@@ -51,7 +51,9 @@ async function commandExists(cmd: string, cwd?: string): Promise<boolean> {
 }
 
 // History managers for autocomplete suggestions
+// Path history is keyed per-host so local and remote paths don't mix
 function getProjectPathHistory(remoteHost: string): HistoryManager {
+  // Local keeps the original key for backward compatibility with existing history
   const key = remoteHost ? `dialog-new:project-paths:${remoteHost}` : "dialog-new:project-paths"
   return new HistoryManager(key, 30)
 }
@@ -83,7 +85,7 @@ const TOOLS: { value: Tool; label: string; description: string }[] = [
   { value: "shell", label: "Shell", description: "Plain terminal session" }
 ]
 
-type FocusField = "title" | "host" | "tool" | "resumeSession" | "skipPermissions" | "customCommand" | "path" | "worktree" | "branch"
+type FocusField = "title" | "host" | "tool" | "resumeSession" | "skipPermissions" | "customCommand" | "path" | "worktree" | "branch" | "copyClaudeDir"
 
 export function DialogNew(props?: { prefill?: SavedFormState }) {
   const dialog = useDialog()

@@ -46,7 +46,7 @@ export function DialogRename(props: DialogRenameProps) {
     setSaving(true)
 
     try {
-      await sync.session.rename(props.session.id, newTitle)
+      sync.session.rename(props.session.id, newTitle)
       toast.show({ message: `Renamed to "${newTitle}"`, variant: "success", duration: 2000 })
       dialog.clear()
       sync.refresh()

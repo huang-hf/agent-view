@@ -46,6 +46,7 @@ export function DialogSettings() {
   const toast = useToast()
   const themeCtx = useTheme()
   const sync = useSync()
+  const { reload: reloadConfig } = useConfig()
 
   function showSettingsList() {
     const config = getConfig()
@@ -81,6 +82,11 @@ export function DialogSettings() {
         value: "copyClaudeDir" as const,
         footer: (config.copyClaudeDir !== false) ? "Yes" : "No",
       },
+      {
+        title: "Worktree: sync remote branch",
+        value: "syncRemoteBranch" as const,
+        footer: config.worktree?.syncRemoteBranch || "Disabled",
+      },
     ]
 
     dialog.replace(() => (
@@ -96,6 +102,7 @@ export function DialogSettings() {
             case "autoHibernate": return showAutoHibernate()
             case "remoteHosts": return showRemoteHosts()
             case "copyClaudeDir": return showCopyClaudeDir()
+            case "syncRemoteBranch": return showWorktreeSyncBranch()
           }
         }}
       />
@@ -105,6 +112,7 @@ export function DialogSettings() {
   async function updateConfig(updater: (config: Awaited<ReturnType<typeof loadConfig>>) => Awaited<ReturnType<typeof loadConfig>>) {
     const config = await loadConfig()
     await saveConfig(updater(config))
+    await reloadConfig()
     toast.show({ message: "Setting saved", variant: "success", duration: 1500 })
     showSettingsList()
   }
@@ -177,23 +185,6 @@ export function DialogSettings() {
         current={config.autoHibernateMinutes || 0}
         skipFilter
         onSelect={(opt) => updateConfig((c) => ({ ...c, autoHibernateMinutes: opt.value, autoHibernatePrompted: true }))}
-      />
-    ))
-  }
-
-  function showCopyClaudeDir() {
-    const config = getConfig()
-    const options = [
-      { title: "Yes (copy .claude directory to new worktree)", value: true },
-      { title: "No", value: false },
-    ]
-    dialog.replace(() => (
-      <DialogSelect
-        title="Copy .claude to worktree"
-        options={options}
-        current={config.copyClaudeDir !== false}
-        skipFilter
-        onSelect={(opt) => updateConfig((c) => ({ ...c, copyClaudeDir: opt.value }))}
       />
     ))
   }
@@ -317,6 +308,104 @@ export function DialogSettings() {
         }}
       />
     ))
+  }
+
+  function showCopyClaudeDir() {
+    const config = getConfig()
+    const options = [
+      { title: "Yes (copy .claude directory to new worktree)", value: true },
+      { title: "No", value: false },
+    ]
+    dialog.replace(() => (
+      <DialogSelect
+        title="Copy .claude to worktree"
+        options={options}
+        current={config.copyClaudeDir !== false}
+        skipFilter
+        onSelect={(opt) => updateConfig((c) => ({ ...c, copyClaudeDir: opt.value }))}
+      />
+    ))
+  }
+
+  function showWorktreeSyncBranch() {
+    const config = getConfig()
+    const current = config.worktree?.syncRemoteBranch || ""
+
+    const PRESET_VALUES = ["", "origin/main", "origin/master", "origin/develop"]
+    const presets: { title: string; value: string }[] = [
+      { title: "Disabled", value: "" },
+      { title: "origin/main", value: "origin/main" },
+      { title: "origin/master", value: "origin/master" },
+      { title: "origin/develop", value: "origin/develop" },
+      { title: "Custom...", value: "custom" },
+    ]
+
+    // If current value is a non-empty custom string, surface it as the selected option
+    const effectiveCurrent = PRESET_VALUES.includes(current) ? current : "custom"
+
+    dialog.replace(() => (
+      <DialogSelect
+        title={"Worktree: sync remote branch\n\nWhen set, new worktrees will fetch\nthis remote branch first."}
+        options={presets}
+        current={effectiveCurrent}
+        skipFilter
+        onSelect={(opt) => {
+          if (opt.value === "custom") {
+            showWorktreeSyncBranchCustom(current)
+          } else {
+            updateConfig((c) => ({
+              ...c,
+              worktree: { ...c.worktree, syncRemoteBranch: opt.value || undefined }
+            }))
+          }
+        }}
+      />
+    ))
+  }
+
+  function showWorktreeSyncBranchCustom(initialValue: string) {
+    const { theme } = themeCtx
+
+    dialog.push(() => {
+      const [branch, setBranch] = createSignal(initialValue)
+      let inputRef: InputRenderable | undefined
+
+      async function handleSave() {
+        const val = branch().trim()
+        await updateConfig((c) => ({
+          ...c,
+          worktree: { ...c.worktree, syncRemoteBranch: val || undefined }
+        }))
+      }
+
+      useKeyboard((evt) => {
+        if (evt.name === "return" && !evt.shift) { evt.preventDefault(); handleSave() }
+        if (evt.name === "escape") { evt.preventDefault(); dialog.pop() }
+      })
+
+      return (
+        <box gap={1} paddingBottom={1}>
+          <DialogHeader title="Custom sync branch" />
+          <box paddingLeft={4} paddingRight={4} paddingTop={1} gap={1}>
+            <text fg={theme.textMuted}>Enter remote branch (e.g. origin/main):</text>
+            <input
+              placeholder="e.g. origin/release"
+              value={branch()}
+              onInput={setBranch}
+              focusedBackgroundColor={theme.backgroundElement}
+              cursorColor={theme.primary}
+              focusedTextColor={theme.text}
+              ref={(r) => {
+                inputRef = r
+                setTimeout(() => inputRef?.focus(), 1)
+              }}
+            />
+          </box>
+          <ActionButton label="Save" loadingLabel="Saving..." loading={false} onAction={handleSave} />
+          <DialogFooter hint="Enter: save | Esc: cancel" />
+        </box>
+      )
+    })
   }
 
   // Show the settings list on mount

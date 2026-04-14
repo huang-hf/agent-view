@@ -16,7 +16,6 @@ import fs from "fs"
 import os from "os"
 import { buildClaudeCommand } from "./claude"
 import { getConfig, saveConfig } from "./config"
-import { addRecent } from "./recents"
 import { paginateTranscript, type TranscriptPageOptions } from "./transcript"
 
 const logFile = path.join(os.homedir(), ".agent-orchestrator", "debug.log")
@@ -516,6 +515,7 @@ export class SessionManager {
 
   private async saveRecent(options: SessionCreateOptions): Promise<void> {
     const config = getConfig()
+    const recents = [...(config.recents || [])]
 
     const newRecent: Recent = {
       name: options.title || "untitled",
@@ -524,7 +524,17 @@ export class SessionManager {
       groupPath: options.groupPath
     }
 
-    const recents = addRecent(config.recents || [], newRecent)
+    // Dedupe by projectPath + tool
+    const existingIdx = recents.findIndex(r =>
+      r.projectPath === newRecent.projectPath && r.tool === newRecent.tool
+    )
+
+    if (existingIdx >= 0) {
+      recents[existingIdx] = newRecent
+    } else {
+      recents.push(newRecent)
+    }
+
     await saveConfig({ ...config, recents })
   }
 
@@ -855,18 +865,9 @@ export class SessionManager {
     return getStorage().getSession(sessionId)
   }
 
-  async updateTitle(sessionId: string, title: string): Promise<void> {
+  updateTitle(sessionId: string, title: string): void {
     const storage = getStorage()
-    const session = storage.getSession(sessionId)
-
-    // Update title in storage
     storage.updateSessionField(sessionId, "title", title)
-
-    // Also rename tmux window to show the new title (keep session name for internal tracking)
-    if (session?.tmuxSession) {
-      await tmux.renameWindow(session.tmuxSession, title)
-    }
-
     storage.touch()
   }
 
