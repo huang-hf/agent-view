@@ -89,17 +89,6 @@ agent-view
 av
 ```
 
-### Run Headless Notify Watcher
-
-Use `av -r` to run a headless watcher that sends webhook notifications when a session enters `waiting` status.
-
-```bash
-av -r
-```
-
-For QQ Official Bot forwarding, a minimal relay service is included at `relay/` in this repository.
-See [`relay/README.md`](relay/README.md) for setup.
-
 ### Web UI (Mobile + Remote)
 
 Start the web server:
@@ -163,8 +152,7 @@ tailscale serve status
 | Key | Action |
 |-----|--------|
 | `Ctrl+K` | Detach and open command palette |
-| `Ctrl+T` | Toggle terminal pane (open/close) |
-| `Ctrl+B` then `o` | Toggle focus between panes (tmux default) |
+| `Ctrl+T` | Open session scratchpad popup |
 | `Ctrl+Q` | Detach (return to dashboard) |
 
 ### Create a Session
