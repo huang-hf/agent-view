@@ -3,7 +3,7 @@
  * Manages agent-view sessions on remote machines via SSH
  */
 
-import { spawn, spawnSync } from "child_process"
+import { spawn, spawnSync, execFileSync } from "child_process"
 import { promisify } from "util"
 import { exec, execFile } from "child_process"
 import path from "path"
@@ -56,6 +56,98 @@ function sshOptions(host: string): string[] {
     "-o", `ConnectTimeout=${SSH_TIMEOUT}`,
     "-o", "StrictHostKeyChecking=accept-new",
   ]
+}
+
+type AttachInput = Pick<NodeJS.ReadStream, "isTTY" | "resume" | "setRawMode" | "on" | "removeListener">
+type AttachOutput = Pick<NodeJS.WriteStream, "write">
+type AttachSpawnResult = Pick<ReturnType<typeof spawn>, "on" | "kill">
+type AttachSpawn = (command: string, args: string[], options: { stdio: "inherit"; env: NodeJS.ProcessEnv }) => AttachSpawnResult
+
+function pause(ms: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
+}
+
+export async function attachWithLocalDetach(options: {
+  alias: string
+  sessionName: string
+  socketPath: string
+  tmuxArgs: string[]
+  stdin?: AttachInput
+  stdout?: AttachOutput
+  spawnFn?: AttachSpawn
+  pauseMs?: (ms: number) => void
+}): Promise<void> {
+  const stdin = options.stdin ?? process.stdin
+  const stdout = options.stdout ?? process.stdout
+  const spawnFn = options.spawnFn ?? ((command, args, spawnOptions) => spawn(command, args, spawnOptions))
+  const pauseMs = options.pauseMs ?? pause
+
+  stdout.write("\x1b[?1049l\x1b[2J\x1b[H\x1b[?25h")
+  stdout.write(`\r\nConnecting to ${options.alias}... (Ctrl+Q to detach | auto-disconnect after 30s silence)\r\n\r\n`)
+
+  const sshArgs = [
+    "-t",
+    "-o", "ConnectTimeout=10",
+    "-o", "ControlMaster=no",
+    "-o", `ControlPath=${options.socketPath}`,
+    "-o", "ServerAliveInterval=10",
+    "-o", "ServerAliveCountMax=3",
+    "-o", "TCPKeepAlive=yes",
+    options.alias,
+    ...options.tmuxArgs
+  ]
+
+  await new Promise<void>((resolve, reject) => {
+    let settled = false
+    let detaching = false
+    const child = spawnFn("ssh", sshArgs, { stdio: "inherit", env: process.env })
+    const wasRaw = stdin.isTTY ? process.stdin.isRaw : undefined
+
+    if (stdin.isTTY) {
+      stdin.setRawMode(true)
+    }
+    stdin.resume()
+
+    const cleanup = () => {
+      stdin.removeListener("data", handleStdin)
+      if (stdin.isTTY) {
+        stdin.setRawMode(wasRaw ?? false)
+      }
+      stdout.write("\x1b[2J\x1b[H\x1b[?1049h\x1b]0;Agent View\x07")
+    }
+
+    const finish = (fn: () => void) => {
+      if (settled) return
+      settled = true
+      cleanup()
+      fn()
+    }
+
+    const handleStdin = (data: Buffer) => {
+      if (data.length === 1 && data[0] === 17) {
+        detaching = true
+        child.kill("SIGTERM")
+      }
+    }
+
+    stdin.on("data", handleStdin)
+
+    child.on("exit", (code, signal) => {
+      if (detaching || signal === "SIGTERM") {
+        finish(resolve)
+        return
+      }
+
+      if (code !== 0) {
+        stdout.write(`\r\n\x1b[33m[agent-view] Connection to ${options.alias} lost. Returning to TUI...\x1b[0m\r\n`)
+        pauseMs(1500)
+        finish(() => reject(new Error(`Remote attach failed (exit ${code}): ssh ${options.alias} tmux attach-session -t ${options.sessionName}`)))
+        return
+      }
+
+      finish(resolve)
+    })
+  })
 }
 
 export class SSHRunner {
@@ -552,59 +644,16 @@ export class SshTmuxExecutor implements TmuxExecutor {
     await this.manager.execRemote(this.alias, this.tmuxArgs(...args))
   }
 
-  spawnAttach(sessionName: string): void {
+  async spawnAttach(sessionName: string, options?: { sessionId?: string }): Promise<void> {
     const socketPath = this.manager.getSocketPath(this.alias)
 
-    this.uploadTmuxConfSync(socketPath)
-
-    process.stdout.write("\x1b[?1049l\x1b[2J\x1b[H\x1b[?25h")
-    // Brief connection hint (visible until tmux renders over it)
-    process.stdout.write(`\r\nConnecting to ${this.alias}... (Ctrl+Q to detach | auto-disconnect after 30s silence)\r\n\r\n`)
-    const sshArgs = [
-      "-t",
-      "-o", "ConnectTimeout=10",
-      "-o", "ControlMaster=no",
-      "-o", `ControlPath=${socketPath}`,
-      "-o", "ServerAliveInterval=10",  // send keepalive every 10s
-      "-o", "ServerAliveCountMax=3",   // exit after 3 missed responses (~30s)
-      "-o", "TCPKeepAlive=yes",
-      this.alias,
-      ...this.tmuxArgs("attach-session", "-t", sessionName)
-    ]
-
-    // SSH -t for interactive PTY, attach to remote tmux session (blocking)
-    const result = spawnSync("ssh", sshArgs, { stdio: "inherit" })
-    // If SSH exited abnormally (network loss detected via keepalive), show a
-    // visible message before restoring TUI so user knows what happened.
-    if (result.status !== 0 || result.error) {
-      process.stdout.write(`\r\n\x1b[33m[agent-view] Connection to ${this.alias} lost. Returning to TUI...\x1b[0m\r\n`)
-      // Pause so user can read the message before TUI buffer takes over
-      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1500)
-    }
-    process.stdout.write("\x1b[2J\x1b[H\x1b[?1049h\x1b]0;Agent View\x07")
-
-    // Propagate SSH/tmux errors so doAttach can show them as toast
-    if (result.error) {
-      throw result.error
-    }
-    if (result.status !== null && result.status !== 0) {
-      throw new Error(`Remote attach failed (exit ${result.status}): ssh ${this.alias} tmux attach-session -t ${sessionName}`)
-    }
-  }
-
-  private uploadTmuxConfSync(socketPath: string): void {
-    try {
-      const confContent = fs.readFileSync(LOCAL_TMUX_CONF, "utf-8")
-      const { execFileSync } = require("child_process")
-      execFileSync("ssh", [
-        "-o", "ControlMaster=no",
-        "-o", `ControlPath=${socketPath}`,
-        this.alias,
-        "sh", "-c", "mkdir -p ~/.agent-view && cat > ~/.agent-view/tmux.conf"
-      ], { input: confContent, timeout: 5000 })
-    } catch {
-      // Non-fatal: Ctrl+Q won't work but attach can still proceed.
-    }
+    this.uploadTmuxConfSync(socketPath, sessionName, options?.sessionId)
+    await attachWithLocalDetach({
+      alias: this.alias,
+      sessionName,
+      socketPath,
+      tmuxArgs: this.tmuxArgs("attach-session", "-t", sessionName)
+    })
   }
 
   /**
@@ -612,7 +661,7 @@ export class SshTmuxExecutor implements TmuxExecutor {
    * Used in spawnAttach to guarantee Ctrl+Q binding is available.
    * Non-fatal: if upload fails, Ctrl+Q won't work but attach still proceeds.
    */
-  private uploadTmuxConfSync(socketPath: string): void {
+  private uploadTmuxConfSync(socketPath: string, sessionName?: string, sessionId?: string): void {
     try {
       const confContent = fs.readFileSync(LOCAL_TMUX_CONF, "utf-8")
 
@@ -640,6 +689,22 @@ export class SshTmuxExecutor implements TmuxExecutor {
         this.alias,
         "tmux", "-L", TMUX_SOCKET, "source-file", REMOTE_TMUX_CONF
       ], { timeout: 3000 })
+
+      if (sessionName && sessionId) {
+        execFileSync("ssh", [
+          "-o", "ControlMaster=no",
+          "-o", `ControlPath=${socketPath}`,
+          this.alias,
+          "mkdir", "-p", "~/.agent-view/scratchpads"
+        ], { timeout: 3000 })
+      execFileSync("ssh", [
+        "-o", "ControlMaster=no",
+        "-o", `ControlPath=${socketPath}`,
+        this.alias,
+        "sh", "-lc",
+          `: >> ~/.agent-view/scratchpads/${sessionId}.md && tmux -L ${TMUX_SOCKET} set-option -g @agent_view_scratchpad_editor "\${EDITOR:-nano}" && tmux -L ${TMUX_SOCKET} set-option -t ${sessionName} @agent_view_scratchpad_path ~/.agent-view/scratchpads/${sessionId}.md && tmux -L ${TMUX_SOCKET} bind-key -n C-t run-shell 'tmux display-popup -w 70% -h 70% -E "#{@agent_view_scratchpad_editor} #{@agent_view_scratchpad_path}"' && tmux -L ${TMUX_SOCKET} set-option -t ${sessionName} status-right '#[fg=#89b4fa]Ctrl+Q#[fg=#6c7086] detach #[fg=#6c7086]| #[fg=#89b4fa]Ctrl+T#[fg=#6c7086] scratchpad' && tmux -L ${TMUX_SOCKET} set-option -t ${sessionName} status-right-length 160`
+        ], { timeout: 5000 })
+      }
 
       // Cache successful upload
       this.lastUploadedConf = confContent

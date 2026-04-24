@@ -12,7 +12,6 @@ import { useRoute } from "@tui/context/route"
 import { useDialog } from "@tui/ui/dialog"
 import { useToast } from "@tui/ui/toast"
 import { DialogSelect, type DialogSelectOption } from "@tui/ui/dialog-select"
-import { attachSessionSync } from "@/core/tmux"
 import { getSessionManager } from "@/core/session"
 import type { Session, SessionStatus } from "@/core/types"
 import { formatSmartTime, truncatePath } from "@tui/util/locale"
@@ -108,7 +107,7 @@ export function DialogSessions() {
     }
   }
 
-  function handleAttach(sessionId: string) {
+  async function handleAttach(sessionId: string) {
     const session = sync.session.get(sessionId)
     if (!session) {
       toast.show({ message: "Session not found", variant: "error", duration: 2000 })
@@ -125,11 +124,7 @@ export function DialogSessions() {
 
     // Use sync attach - this blocks the event loop completely
     try {
-      if (session.remoteHost) {
-        getSessionManager().attach(session.id)
-      } else {
-        attachSessionSync(session.tmuxSession)
-      }
+      await getSessionManager().attach(session.id)
     } catch (err) {
       console.error("Attach error:", err)
     }
@@ -150,7 +145,7 @@ export function DialogSessions() {
       current={currentSessionId()}
       flat
       onSelect={(option) => {
-        handleAttach(option.value)
+        void handleAttach(option.value)
       }}
       keybinds={[
         { key: "d", title: "Delete", onTrigger: (opt) => handleDelete(opt.value) },

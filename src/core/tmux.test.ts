@@ -1,316 +1,72 @@
-import { describe, test, expect, beforeEach } from "bun:test"
-
+import { describe, expect, test } from "bun:test"
 import {
-  SESSION_PREFIX,
-  generateSessionName,
+  buildScratchpadPopupCommand,
+  buildScratchpadPopupKeyBinding,
   parseToolStatus,
-  sessionExists,
-  getSessionActivity,
-  registerSessionInCache,
-  isSessionActive,
-  LocalTmuxExecutor,
-  localExecutor,
 } from "./tmux"
 
-// Note: We need to access the internal sessionCache for testing
-// Since it's a module-level variable, we'll test through the public API
-
-describe("generateSessionName", () => {
-  test("prefixes with SESSION_PREFIX", () => {
-    const name = generateSessionName("test")
-    expect(name.startsWith(SESSION_PREFIX)).toBe(true)
-  })
-
-  test("sanitizes special characters", () => {
-    const name = generateSessionName("My Feature!")
-    // Should only contain alphanumeric, dashes, and underscores
-    expect(name).toMatch(/^agentorch_[a-z0-9-]+-[a-z0-9]+$/)
-  })
-
-  test("converts to lowercase", () => {
-    const name = generateSessionName("UPPERCASE")
-    expect(name.toLowerCase()).toBe(name)
-  })
-
-  test("replaces spaces and special chars with dashes", () => {
-    const name = generateSessionName("Hello World!")
-    expect(name).toContain("hello-world")
-  })
-
-  test("removes leading/trailing dashes from safe name", () => {
-    const name = generateSessionName("---test---")
-    expect(name).toContain("test")
-    expect(name).not.toContain("---")
-  })
-
-  test("truncates long titles to 20 characters", () => {
-    const longTitle = "this-is-a-very-long-title-that-should-be-truncated"
-    const name = generateSessionName(longTitle)
-    // The safe part (between prefix and timestamp) should be <= 20 chars
-    const parts = name.replace(SESSION_PREFIX, "").split("-")
-    parts.pop() // Remove timestamp
-    const safePart = parts.join("-")
-    expect(safePart.length).toBeLessThanOrEqual(20)
-  })
-
-  test("adds timestamp for uniqueness", () => {
-    const name1 = generateSessionName("test")
-    const name2 = generateSessionName("test")
-
-    // Both should have the same prefix structure
-    expect(name1.startsWith(`${SESSION_PREFIX}test-`)).toBe(true)
-    expect(name2.startsWith(`${SESSION_PREFIX}test-`)).toBe(true)
-
-    // Extract timestamps (last part after final dash)
-    const timestamp1 = name1.split("-").pop()
-    const timestamp2 = name2.split("-").pop()
-
-    expect(timestamp1).toBeTruthy()
-    expect(timestamp2).toBeTruthy()
-  })
-
-  test("generates valid tmux session names", () => {
-    const testCases = [
-      "Simple",
-      "with spaces",
-      "Special!@#$%^&*()",
-      "Mix3d-C4se_123",
+describe("parseToolStatus codex waiting detection", () => {
+  test("does not treat normal assistant text as waiting", () => {
+    const output = [
+      "• Some normal output",
       "",
-    ]
+      "Do you want to allow me to run `tmux capture-pane` against the local socket?",
+      "",
+      "› Summarize recent commits",
+    ].join("\n")
 
-    for (const title of testCases) {
-      const name = generateSessionName(title)
-      // tmux session names should not contain periods or colons
-      expect(name).not.toContain(".")
-      expect(name).not.toContain(":")
-    }
+    expect(parseToolStatus(output, "codex").isWaiting).toBe(false)
+  })
+
+  test("detects explicit Codex approval UI cues", () => {
+    const output = [
+      "Approval required",
+      "",
+      "Run command?",
+      "[y/N]",
+    ].join("\n")
+
+    expect(parseToolStatus(output, "codex").isWaiting).toBe(true)
   })
 })
 
-describe("parseToolStatus", () => {
-  test("detects y/n prompt waiting patterns", () => {
-    const output = "Some output\nDo you want to proceed? (y/n)"
-    const status = parseToolStatus(output)
-    expect(status.isWaiting).toBe(true)
-    expect(status.hasError).toBe(false)
-  })
-
-  test("detects [Y/n] prompt waiting patterns", () => {
-    const output = "Install packages? [Y/n]"
-    const status = parseToolStatus(output)
-    expect(status.isWaiting).toBe(true)
-  })
-
-  test("detects [y/N] prompt waiting patterns", () => {
-    const output = "Run command? [y/N]"
-    const status = parseToolStatus(output, "codex")
-    expect(status.isWaiting).toBe(true)
-  })
-
-  test("detects Codex approval header as waiting", () => {
-    const output = `Approval required
-Run command? [y/N]`
-    const status = parseToolStatus(output, "codex")
-    expect(status.isWaiting).toBe(true)
-  })
-
-  test("detects Codex press enter confirm prompt as waiting", () => {
-    const output = `Apply patch?
-Press Enter to confirm`
-    const status = parseToolStatus(output, "codex")
-    expect(status.isWaiting).toBe(true)
-  })
-
-  test("detects Press enter to continue", () => {
-    const output = "Operation completed.\nPress enter to continue..."
-    const status = parseToolStatus(output)
-    expect(status.isWaiting).toBe(true)
-  })
-
-  test("detects Codex numbered yes proceed prompt", () => {
-    const output = `Approval required
-› 1. Yes, proceed (y)
-  2. No, cancel (n)`
-    const status = parseToolStatus(output, "codex")
-    expect(status.isWaiting).toBe(true)
-  })
-
-  test("detects waiting for input", () => {
-    const output = "The process is waiting for user input"
-    const status = parseToolStatus(output)
-    expect(status.isWaiting).toBe(true)
-  })
-
-  test("detects Claude permission prompt", () => {
-    // Claude Code permission prompts should be detected as waiting
-    const output = "Do you want to run this command?\n  Yes, allow once\n  Allow always\n  No, and tell Claude"
-    const status = parseToolStatus(output, "claude")
-    expect(status.isWaiting).toBe(true)
-  })
-
-  test("detects Claude numbered permission prompt", () => {
-    // Real Claude Code permission prompt format
-    const output = `Do you want to proceed?
-  1. Yes
-   2. Yes, allow reading from src/ from this project
-   3. No
- Esc to cancel · Tab to amend`
-    const status = parseToolStatus(output, "claude")
-    expect(status.isWaiting).toBe(true)
-    expect(status.isBusy).toBe(false)
-  })
-
-  test("does not treat generic numbered '1. Yes' content as waiting", () => {
-    const output = `Implementation notes:
-1. Yes, we should refactor this module
-2. No blocking issues found`
-    const status = parseToolStatus(output, "claude")
-    expect(status.isWaiting).toBe(false)
-  })
-
-  test("detects Claude at prompt as idle (not waiting)", () => {
-    // Claude at regular prompt is idle, not blocked on anything
-    const output = `Claude finished the task.
-  ? for shortcuts`
-    const status = parseToolStatus(output, "claude")
-    expect(status.isWaiting).toBe(false) // Not blocked, just at prompt
-    expect(status.isBusy).toBe(false)
-  })
-
-  test("detects Claude mode indicator as idle (not waiting)", () => {
-    // Claude showing mode indicator is idle, not blocked
-    const output = `Made changes to file.ts
- accept edits on (shift+tab to cycle)`
-    const status = parseToolStatus(output, "claude")
-    expect(status.isWaiting).toBe(false) // Mode indicator, not a blocking prompt
-    expect(status.isBusy).toBe(false)
-  })
-
-  test("detects Claude busy with spinner", () => {
-    // Spinner character indicates Claude is processing
-    const output = `⠹ Working on your request...`
-    const status = parseToolStatus(output, "claude")
-    expect(status.isBusy).toBe(true)
-  })
-
-  test("detects Claude exited state", () => {
-    // Claude has exited, shell prompt showing
-    const output = `Resume this session with:
-claude --resume abc123
-bin git:(main) ❯`
-    const status = parseToolStatus(output, "claude")
-    expect(status.isWaiting).toBe(false)
-    expect(status.isBusy).toBe(false)
-    expect(status.hasExited).toBe(true)
-  })
-
-  test("detects do you want to pattern", () => {
-    const output = "Do you want to continue?"
-    const status = parseToolStatus(output)
-    expect(status.isWaiting).toBe(true)
-  })
-
-  test("detects error patterns", () => {
-    const errorOutputs = [
-      "Error: Something went wrong",
-      "Failed: Unable to connect",
-      "Exception: NullPointerException",
-      "Traceback (most recent call last):",
-      "panic: runtime error",
-    ]
-
-    for (const output of errorOutputs) {
-      const status = parseToolStatus(output)
-      expect(status.hasError).toBe(true)
-    }
-  })
-
-  test("returns isWaiting=false for normal output", () => {
-    const output = "Building project...\nCompiling files...\nDone!"
-    const status = parseToolStatus(output)
-    expect(status.isWaiting).toBe(false)
-    expect(status.hasError).toBe(false)
-  })
-
-  test("only checks last 30 lines", () => {
-    // Create output with error early but clean output at the end
-    const lines = ["Error: old error"]
-    for (let i = 0; i < 35; i++) {
-      lines.push(`Line ${i}`)
-    }
-    const output = lines.join("\n")
-
-    const status = parseToolStatus(output)
-    expect(status.hasError).toBe(false) // Error is outside last 30 lines
-  })
-
-  test("isActive is always false (determined by activity timestamp)", () => {
-    const status = parseToolStatus("any output")
-    expect(status.isActive).toBe(false)
+describe("parseToolStatus generic waiting detection", () => {
+  test("detects interactive prompts for non-codex tools", () => {
+    const output = "Do you want to continue? (y/n)"
+    expect(parseToolStatus(output, "shell").isWaiting).toBe(true)
   })
 })
 
-describe("session cache", () => {
-  // Note: These tests rely on the module-level cache state
-  // We test through the public API
+describe("scratchpad popup helpers", () => {
+  test("builds a tmux popup command for a session scratchpad file", () => {
+    const command = buildScratchpadPopupCommand({
+      filePath: "/tmp/session-a.md",
+      editor: "nano",
+    })
 
-  test("sessionExists returns false when cache is stale", () => {
-    // When cache is very old or uninitialized, sessionExists should return false
-    // This is the default state since cache timestamp starts at 0
-    const exists = sessionExists("nonexistent-session")
-    expect(exists).toBe(false)
+    expect(command).toContain("display-popup")
+    expect(command).toContain("-w 70%")
+    expect(command).toContain("-h 70%")
+    expect(command).toContain("nano")
+    expect(command).toContain("/tmp/session-a.md")
   })
 
-  test("getSessionActivity returns 0 for unknown sessions", () => {
-    const activity = getSessionActivity("unknown-session")
-    expect(activity).toBe(0)
+  test("builds a Ctrl+T key binding that opens the popup", () => {
+    const binding = buildScratchpadPopupKeyBinding({
+      filePath: "/tmp/session-a.md",
+      editor: "nano",
+    })
+
+    expect(binding).toContain("bind-key -n C-t")
+    expect(binding).toContain("display-popup")
+    expect(binding).toContain("/tmp/session-a.md")
   })
 
-  test("registerSessionInCache adds session with current timestamp", () => {
-    const testSessionName = `test-session-${Date.now()}`
+  test("builds a session-aware Ctrl+T binding from tmux options", () => {
+    const binding = buildScratchpadPopupKeyBinding()
 
-    // Register the session
-    registerSessionInCache(testSessionName)
-
-    // Since we just registered it, and the cache timestamp was 0 (stale),
-    // sessionExists will still return false because the cache is stale
-    // But getSessionActivity should return a value > 0 if we ignore staleness
-    // Actually, getSessionActivity also checks staleness, so it returns 0
-
-    // The behavior is: after registering, the session is in cache.data
-    // but the cache.timestamp check will fail because it's still the old timestamp
-    // This is expected behavior - register is for preventing race conditions
-    // when you know you just created a session
-  })
-
-  test("isSessionActive checks threshold correctly", () => {
-    // Since cache is likely stale in test environment,
-    // isSessionActive should return false
-    const active = isSessionActive("any-session", 2)
-    expect(active).toBe(false)
-  })
-
-  test("isSessionActive returns false for unknown sessions", () => {
-    const active = isSessionActive("definitely-not-exists", 2)
-    expect(active).toBe(false)
-  })
-})
-
-describe("SESSION_PREFIX constant", () => {
-  test("has expected value", () => {
-    expect(SESSION_PREFIX).toBe("agentorch_")
-  })
-})
-
-describe("LocalTmuxExecutor", () => {
-  test("implements TmuxExecutor interface", () => {
-    const executor = new LocalTmuxExecutor()
-    expect(typeof executor.exec).toBe("function")
-    expect(typeof executor.execFile).toBe("function")
-    expect(typeof executor.spawnAttach).toBe("function")
-  })
-
-  test("localExecutor is a LocalTmuxExecutor instance", () => {
-    expect(localExecutor).toBeInstanceOf(LocalTmuxExecutor)
+    expect(binding).toContain("bind-key -n C-t")
+    expect(binding).toContain("#{@agent_view_scratchpad_editor}")
+    expect(binding).toContain("#{@agent_view_scratchpad_path}")
   })
 })

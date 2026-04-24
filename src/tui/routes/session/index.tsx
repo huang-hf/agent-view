@@ -14,7 +14,6 @@ import { useToast } from "@tui/ui/toast"
 import { DialogSessions } from "@tui/component/dialog-sessions"
 import { DialogRename } from "@tui/component/dialog-rename"
 import { getSessionManager } from "@/core/session"
-import { TodoSidebar } from "./sidebar-todo"
 import type { Session as SessionType, SessionStatus } from "@/core/types"
 import { SessionHeader } from "./header"
 import { SessionFooter } from "./footer"
@@ -126,55 +125,45 @@ export function Session() {
             {/* Header */}
             <SessionHeader session={s()} />
 
-            {/* Main area + sidebar */}
-            <box flexDirection="row" flexGrow={1}>
-              {/* Left: output + input */}
-              <box flexDirection="column" flexGrow={1}>
-                {/* Output area */}
-                <box flexGrow={1} padding={1}>
-                  <scrollbox
-                    ref={(r: ScrollBoxRenderable) => (scrollRef = r)}
-                    flexGrow={1}
-                    scrollbarOptions={{ visible: true }}
-                  >
-                    <text fg={theme.text} wrapMode="word">
-                      {output() || <span style={{ fg: theme.textMuted }}>Waiting for output...</span>}
-                    </text>
-                  </scrollbox>
-                </box>
-
-                {/* Input area */}
-                <box paddingLeft={1} paddingRight={1} paddingBottom={1}>
-                  <box
-                    backgroundColor={theme.backgroundPanel}
-                    padding={1}
-                    flexDirection="row"
-                    gap={1}
-                  >
-                    <text fg={theme.primary}>❯</text>
-                    <input
-                      flexGrow={1}
-                      value={inputValue()}
-                      onInput={setInputValue}
-                      onReturn={() => sendMessage()}
-                      placeholder="Send message to session..."
-                      focusedBackgroundColor={theme.backgroundPanel}
-                      cursorColor={theme.primary}
-                      focusedTextColor={theme.text}
-                      ref={(r) => {
-                        inputRef = r
-                        setTimeout(() => inputRef?.focus(), 10)
-                      }}
-                    />
-                  </box>
-                </box>
+            <box flexDirection="column" flexGrow={1}>
+              {/* Output area */}
+              <box flexGrow={1} padding={1}>
+                <scrollbox
+                  ref={(r: ScrollBoxRenderable) => (scrollRef = r)}
+                  flexGrow={1}
+                  scrollbarOptions={{ visible: true }}
+                >
+                  <text fg={theme.text} wrapMode="word">
+                    {output() || <span style={{ fg: theme.textMuted }}>Waiting for output...</span>}
+                  </text>
+                </scrollbox>
               </box>
 
-              {/* Right: TODO sidebar */}
-              <TodoSidebar
-                sessionId={sessionId()}
-                onSend={(text) => manager.sendMessage(sessionId(), text)}
-              />
+              {/* Input area */}
+              <box paddingLeft={1} paddingRight={1} paddingBottom={1}>
+                <box
+                  backgroundColor={theme.backgroundPanel}
+                  padding={1}
+                  flexDirection="row"
+                  gap={1}
+                >
+                  <text fg={theme.primary}>❯</text>
+                  <input
+                    flexGrow={1}
+                    value={inputValue()}
+                    onInput={setInputValue}
+                    onReturn={() => sendMessage()}
+                    placeholder="Send message to session..."
+                    focusedBackgroundColor={theme.backgroundPanel}
+                    cursorColor={theme.primary}
+                    focusedTextColor={theme.text}
+                    ref={(r) => {
+                      inputRef = r
+                      setTimeout(() => inputRef?.focus(), 10)
+                    }}
+                  />
+                </box>
+              </box>
             </box>
 
             {/* Footer */}

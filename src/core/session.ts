@@ -17,6 +17,7 @@ import os from "os"
 import { buildClaudeCommand } from "./claude"
 import { getConfig, saveConfig } from "./config"
 import { paginateTranscript, type TranscriptPageOptions } from "./transcript"
+import { deleteScratchpad } from "./scratchpad"
 
 const logFile = path.join(os.homedir(), ".agent-orchestrator", "debug.log")
 function log(...args: unknown[]) {
@@ -241,13 +242,6 @@ export class SessionManager {
       clearInterval((this as any)._heartbeatInterval)
       ;(this as any)._heartbeatInterval = null
     }
-    if (this.refreshInterval) {
-      clearInterval(this.refreshInterval)
-      this.refreshInterval = null
-    }
-  }
-
-  stopRefreshLoop(): void {
     if (this.refreshInterval) {
       clearInterval(this.refreshInterval)
       this.refreshInterval = null
@@ -578,6 +572,7 @@ export class SessionManager {
       if (session.remoteHost) {
         const executor = this.getExecutor(session.remoteHost)
         await executor.exec(["kill-session", "-t", session.tmuxSession]).catch(() => {})
+        await executor.exec(["run-shell", "-b", `rm -f ~/.agent-view/scratchpads/${sessionId}.md`]).catch(() => {})
       } else {
         await tmux.killSession(session.tmuxSession)
       }
@@ -591,6 +586,7 @@ export class SessionManager {
       }
     }
 
+    deleteScratchpad(sessionId)
     storage.deleteSession(sessionId)
     storage.touch()
   }
@@ -878,7 +874,7 @@ export class SessionManager {
   /**
    * Attach to a session (takes over terminal)
    */
-  attach(sessionId: string): void {
+  async attach(sessionId: string): Promise<void> {
     const storage = getStorage()
     const session = storage.getSession(sessionId)
 
@@ -888,7 +884,7 @@ export class SessionManager {
 
     log("attach() sessionId:", sessionId, "tmuxSession:", session.tmuxSession, "remoteHost:", session.remoteHost)
     const executor = this.getExecutor(session.remoteHost)
-    executor.spawnAttach(session.tmuxSession)
+    await executor.spawnAttach(session.tmuxSession, { sessionId })
     log("attach() returned from spawnAttach")
   }
 

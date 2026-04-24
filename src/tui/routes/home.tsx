@@ -26,7 +26,7 @@ import { executeShortcut, getShortcutGroupPath } from "@/core/shortcut"
 import { useKeybind } from "@tui/context/keybind"
 import { useKV } from "@tui/context/kv"
 import { DialogUpdate } from "@tui/component/dialog-update"
-import { attachSessionSync, capturePane, wasCommandPaletteRequested, sendKeys } from "@/core/tmux"
+import { capturePane, wasCommandPaletteRequested, sendKeys } from "@/core/tmux"
 import { useCommandDialog } from "@tui/component/dialog-command"
 import type { Session, Group } from "@/core/types"
 import { formatRelativeTime, truncatePath } from "@tui/util/locale"
@@ -319,12 +319,7 @@ export function Home() {
 
     renderer.suspend()
     try {
-      if (session.remoteHost) {
-        // Remote: route through session manager executor (blocks via spawnSync)
-        getSessionManager().attach(session.id)
-      } else {
-        attachSessionSync(session.tmuxSession)
-      }
+      await getSessionManager().attach(session.id)
     } catch (err) {
       console.error("Attach error:", err)
       renderer.resume()

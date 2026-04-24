@@ -11,6 +11,7 @@ import { promisify } from "util"
 import path from "path"
 import os from "os"
 import fs from "fs"
+import { ensureScratchpad, resolveScratchpadEditor } from "./scratchpad"
 
 // Lazy load node-pty to avoid import errors in test environments
 let pty: typeof import("node-pty") | null = null
@@ -33,7 +34,7 @@ export interface TmuxExecutor {
   /** Run a tmux subcommand that produces no relevant output */
   execFile(args: string[]): Promise<void>
   /** Full-screen attach (replaces current terminal process) */
-  spawnAttach(sessionName: string): void
+  spawnAttach(sessionName: string, options?: { sessionId?: string }): Promise<void>
 }
 
 export class LocalTmuxExecutor implements TmuxExecutor {
@@ -46,7 +47,10 @@ export class LocalTmuxExecutor implements TmuxExecutor {
     await execFileAsync("tmux", tmuxSpawnArgs(...args))
   }
 
-  spawnAttach(sessionName: string): void {
+  async spawnAttach(sessionName: string, options?: { sessionId?: string }): Promise<void> {
+    if (options?.sessionId) {
+      await installScratchpadBinding(sessionName, options.sessionId)
+    }
     attachSessionSync(sessionName)
   }
 }
@@ -114,6 +118,67 @@ function tmuxCmd(subcmd: string): string {
 function tmuxSpawnArgs(...args: string[]): string[] {
   ensureConfig()
   return ["-L", TMUX_SOCKET, "-f", CONFIG_PATH, ...args]
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\"'\"'`)}'`
+}
+
+export function buildScratchpadPopupCommand(options?: {
+  filePath?: string
+  editor?: string
+}): string {
+  const editor = options?.editor ?? "#{@agent_view_scratchpad_editor}"
+  const filePath = options?.filePath ?? "#{@agent_view_scratchpad_path}"
+  const popupCmd = `tmux display-popup -w 70% -h 70% -E "${editor} ${filePath}"`
+  return `run-shell ${shellQuote(popupCmd)}`
+}
+
+export function buildScratchpadPopupKeyBinding(options?: {
+  filePath?: string
+  editor?: string
+}): string {
+  return `bind-key -n C-t ${buildScratchpadPopupCommand(options)}`
+}
+
+export async function installScratchpadBinding(
+  sessionName: string,
+  sessionId: string
+): Promise<void> {
+  const editor = resolveScratchpadEditor()
+  if (!editor) {
+    try {
+      const logFile = path.join(os.homedir(), ".agent-orchestrator", "debug.log")
+      fs.appendFileSync(logFile, `[${new Date().toISOString()}] [TMUX] scratchpad skipped for ${sessionName}: no editor\n`)
+    } catch {}
+    return
+  }
+
+  const filePath = ensureScratchpad(sessionId)
+  try {
+    const logFile = path.join(os.homedir(), ".agent-orchestrator", "debug.log")
+    fs.appendFileSync(logFile, `[${new Date().toISOString()}] [TMUX] installScratchpadBinding session=${sessionName} sessionId=${sessionId} editor=${editor} path=${filePath}\n`)
+  } catch {}
+  await execFileAsync(
+    "tmux",
+    tmuxSpawnArgs("set-option", "-g", "@agent_view_scratchpad_editor", editor)
+  ).catch(() => {})
+  await execFileAsync(
+    "tmux",
+    tmuxSpawnArgs("set-option", "-t", sessionName, "@agent_view_scratchpad_path", filePath)
+  ).catch(() => {})
+  await execFileAsync(
+    "tmux",
+    tmuxSpawnArgs("set-option", "-t", sessionName, "status-right", "#[fg=#89b4fa]Ctrl+Q#[fg=#6c7086] detach #[fg=#6c7086]| #[fg=#89b4fa]Ctrl+T#[fg=#6c7086] scratchpad")
+  ).catch(() => {})
+  await execFileAsync(
+    "tmux",
+    tmuxSpawnArgs("set-option", "-t", sessionName, "status-right-length", "160")
+  ).catch(() => {})
+  await execFileAsync(
+    "tmux",
+    tmuxSpawnArgs("bind-key", "-n", "C-t", "run-shell", "tmux display-popup -w 70% -h 70% -E \"#{@agent_view_scratchpad_editor} #{@agent_view_scratchpad_path}\"")
+  ).catch(() => {})
 }
 
 // Session cache - reduces subprocess spawns
@@ -505,6 +570,20 @@ const CODEX_WAITING_PATTERNS = [
   /apply patch\?/i,
 ]
 
+// NOTE: Codex sessions include assistant/user conversation text. Generic prompts
+// like "do you want to" appear frequently in normal chat and cause false
+// positives. Codex waiting detection must be limited to explicit approval UI.
+const CODEX_CONFIRM_PATTERNS = [
+  ...CODEX_WAITING_PATTERNS,
+  // Confirmation tokens that generally appear only in the approval UI.
+  /\? \(y\/n\)/i,
+  /\[Y\/n\]/i,
+  /\[y\/N\]/i,
+  /yes, proceed \(y\)/i,
+  /tell codex what to do differently/i,
+  /(?:^|\n)\s*[›>]\s*1\.\s*Yes,\s*proceed\s*\(y\)/i,
+]
+
 const ERROR_PATTERNS = [
   /error:/i,
   /failed:/i,
@@ -562,8 +641,7 @@ export function parseToolStatus(output: string, tool?: string): ToolStatus {
     }
     // If Claude has exited, both isBusy and isWaiting stay false -> will become idle
   } else if (tool === "codex") {
-    isWaiting = WAITING_PATTERNS.some(p => p.test(lastLines)) ||
-      CODEX_WAITING_PATTERNS.some(p => p.test(lastLines))
+    isWaiting = CODEX_CONFIRM_PATTERNS.some(p => p.test(lastLines))
   } else {
     // Generic tool detection
     isWaiting = WAITING_PATTERNS.some(p => p.test(lastLines))
