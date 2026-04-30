@@ -6,14 +6,10 @@
 import { getLastRemoteSession } from "./config"
 import { SSHRunner } from "./ssh"
 import type { RemoteSession } from "./types"
-import path from "path"
-import os from "os"
-import fs from "fs"
+import { debugLog } from "./debug-log"
 
-const logFile = path.join(os.homedir(), ".agent-orchestrator", "debug.log")
 function log(...args: unknown[]) {
-  const msg = `[${new Date().toISOString()}] [REMOTE] ${args.map(a => typeof a === "object" ? JSON.stringify(a) : String(a)).join(" ")}\n`
-  try { fs.appendFileSync(logFile, msg) } catch {}
+  debugLog("REMOTE", ...args)
 }
 
 export class RemoteManager {

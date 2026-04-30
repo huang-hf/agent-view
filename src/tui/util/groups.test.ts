@@ -147,14 +147,12 @@ describe("getGroupStatusSummary", () => {
     const sessions = [
       createMockSession({ id: "1", groupPath: "g", status: "running" }),
       createMockSession({ id: "2", groupPath: "g", status: "running" }),
-      createMockSession({ id: "3", groupPath: "g", status: "waiting" }),
-      createMockSession({ id: "4", groupPath: "g", status: "error" })
+      createMockSession({ id: "3", groupPath: "g", status: "waiting" })
     ]
     const summary = getGroupStatusSummary(sessions, "g")
 
     expect(summary.running).toBe(2)
     expect(summary.waiting).toBe(1)
-    expect(summary.error).toBe(1)
   })
 })
 

@@ -97,8 +97,8 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             waiting: store.sessions.filter((s) => s.status === "waiting"),
             idle: store.sessions.filter((s) => s.status === "idle"),
             stopped: store.sessions.filter((s) => s.status === "stopped"),
-            error: store.sessions.filter((s) => s.status === "error"),
-            hibernated: store.sessions.filter((s) => s.status === "hibernated")
+            hibernated: store.sessions.filter((s) => s.status === "hibernated"),
+            offline: store.sessions.filter((s) => s.status === "offline")
           }
         },
         byGroup(): Map<string, Session[]> {

@@ -28,6 +28,18 @@ describe("parseToolStatus codex waiting detection", () => {
 
     expect(parseToolStatus(output, "codex").isWaiting).toBe(true)
   })
+
+  test("does not mark codex MCP startup warning as error", () => {
+    const output = [
+      "To continue this session, run codex resume 019dbe0e-f162-79f2-9adb-89cb19813efc",
+      "",
+      "⚠ MCP client for `weapp-dev` failed to start: MCP startup failed: handshaking with MCP server failed: connection closed: initialize response",
+      "",
+      "⚠ MCP startup incomplete (failed: weapp-dev)",
+    ].join("\n")
+
+    expect(parseToolStatus(output, "codex").hasError).toBe(false)
+  })
 })
 
 describe("parseToolStatus generic waiting detection", () => {

@@ -12,8 +12,8 @@ const STATUS_LABELS: Record<SessionStatus, { icon: string; label: string }> = {
   waiting: { icon: "◐", label: "Waiting" },
   idle: { icon: "○", label: "Idle" },
   stopped: { icon: "◻", label: "Stopped" },
-  error: { icon: "✗", label: "Error" },
-  hibernated: { icon: "◉", label: "Hibernated" }
+  hibernated: { icon: "◉", label: "Hibernated" },
+  offline: { icon: "◌", label: "Offline" }
 }
 
 function formatTime(date: Date): string {
@@ -32,8 +32,6 @@ export function SessionHeader(props: { session: Session }) {
         return theme.success
       case "waiting":
         return theme.warning
-      case "error":
-        return theme.error
       default:
         return theme.textMuted
     }

@@ -53,7 +53,6 @@ Agent View monitors your sessions and shows real-time status indicators:
 | **Waiting** | `◐` yellow | Needs your input |
 | **Idle** | `○` gray | Ready for commands |
 | **Stopped** | `◻` gray | Session was stopped |
-| **Error** | `✗` red | Something went wrong |
 
 ## Installation
 
@@ -110,7 +109,7 @@ av --all --host 0.0.0.0 --port 4317
 Web UI highlights:
 
 - Single-session mobile layout optimized for phone usage
-- Inbox for waiting and error sessions
+- Inbox for waiting sessions
 - Paged transcript browsing with upward loading
 - Quick actions: `Confirm`, `Interrupt`, `Acknowledge`
 - Browser notifications via Service Worker

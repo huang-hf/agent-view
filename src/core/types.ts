@@ -7,7 +7,6 @@ export type SessionStatus =
   | "running"     // Agent is actively working
   | "waiting"     // Agent needs input/approval
   | "idle"        // Session exists but agent is not active
-  | "error"       // Session has an error
   | "stopped"     // Session was explicitly stopped
   | "hibernated"  // Paused to save memory, expected to resume
   | "offline"     // Remote host unreachable

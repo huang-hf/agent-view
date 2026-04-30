@@ -306,7 +306,7 @@ Usage:
   av --status <id>                Get session status
   av --info <id> [--json]         Get session details
   av --send <id> <message>        Send instructions to a running session
-  av --acknowledge <id>           Mark a waiting/error session as read
+  av --acknowledge <id>           Mark a waiting session as read
   av --confirm <id>               Send Enter to a waiting session
   av --interrupt <id>             Send Esc Esc to interrupt the current task
   av --output <id> [--lines N]    Show session output
@@ -340,7 +340,7 @@ New Session (--new, -n):
 
 List Sessions (--list, -l):
   --group <path>                  Filter by group
-  --status <status>               Filter: running|waiting|idle|stopped|error|hibernated
+  --status <status>               Filter: running|waiting|idle|stopped|hibernated|offline
   --json                          Output as JSON
 
 Delete Session (--delete):

@@ -170,8 +170,8 @@ export async function startWebServer(options: WebServerOptions): Promise<void> {
       if (pathname === "/api/inbox") {
         const { local, remote } = await loadUnifiedSessions(remoteManager, storage)
 
-        const localInbox = local.filter((s) => (s.status === "waiting" || s.status === "error") && !s.acknowledged)
-        const remoteInbox = remote.filter((s) => (s.status === "waiting" || s.status === "error") && !s.acknowledged)
+        const localInbox = local.filter((s) => s.status === "waiting" && !s.acknowledged)
+        const remoteInbox = remote.filter((s) => s.status === "waiting" && !s.acknowledged)
 
         const localItems = await Promise.all(localInbox.map(async (s) => {
           const page = await manager.getOutputPage(s.id, { before: 0, limit: 30, maxLines: 300 })

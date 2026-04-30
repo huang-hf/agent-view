@@ -5,17 +5,9 @@
 
 import { render, useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import type { CliRenderer } from "@opentui/core"
-import fs from "fs"
-import path from "path"
-import os from "os"
-
-// File logger for debugging
-const logDir = path.join(os.homedir(), ".agent-orchestrator")
-const logFile = path.join(logDir, "debug.log")
-fs.mkdirSync(logDir, { recursive: true })
+import { debugLog } from "@/core/debug-log"
 function log(...args: unknown[]) {
-  const msg = `[${new Date().toISOString()}] ${args.map(a => typeof a === "object" ? JSON.stringify(a) : String(a)).join(" ")}\n`
-  fs.appendFileSync(logFile, msg)
+  debugLog("APP", ...args)
 }
 import { Switch, Match, createEffect, ErrorBoundary, Show, onMount, createSignal } from "solid-js"
 import { RouteProvider, useRoute } from "@tui/context/route"

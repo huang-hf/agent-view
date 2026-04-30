@@ -11,6 +11,7 @@ import os from "os"
 import fs from "fs"
 import type { Session, RemoteSession, SessionStatus, Tool } from "./types"
 import type { TmuxExecutor } from "./tmux"
+import { debugLog } from "./debug-log"
 
 const execAsync = promisify(exec)
 const execFileAsync = promisify(execFile)
@@ -23,11 +24,36 @@ const LOCAL_TMUX_CONF = path.join(os.homedir(), ".agent-view", "tmux.conf")
 const TMUX_SOCKET = "agent-view"
 // Remote path where we upload the tmux.conf (relative, SSH expands ~)
 const REMOTE_TMUX_CONF = "~/.agent-view/tmux.conf"
+const REMOTE_SCRATCHPAD_HELPER = "~/.agent-view/bin/scratchpad-popup.sh"
 
-const logFile = path.join(os.homedir(), ".agent-orchestrator", "debug.log")
+const REMOTE_SCRATCHPAD_HELPER_CONTENT = `#!/usr/bin/env bash
+set -eu
+
+target_pane="\${1:-}"
+editor="\${2:-}"
+file_path="\${3:-}"
+
+if [ -z "\${target_pane}" ] || [ -z "\${editor}" ] || [ -z "\${file_path}" ]; then
+  exit 1
+fi
+
+mkdir -p "\$(dirname "\${file_path}")"
+touch "\${file_path}"
+
+export AGENT_VIEW_TARGET_PANE="\${target_pane}"
+editor_base="\${editor##*/}"
+
+if [ "\${editor_base}" = "vim" ] || [ "\${editor_base}" = "vi" ]; then
+  exec "\${editor}" \\
+    -c 'nnoremap <silent> <C-s> :call system("tmux send-keys -t " . shellescape($AGENT_VIEW_TARGET_PANE) . " -l " . shellescape(getline(".")))<Bar>q<CR>' \\
+    "\${file_path}"
+fi
+
+exec "\${editor}" "\${file_path}"
+`
+
 function log(...args: unknown[]) {
-  const msg = `[${new Date().toISOString()}] [SSH] ${args.map(a => typeof a === "object" ? JSON.stringify(a) : String(a)).join(" ")}\n`
-  try { fs.appendFileSync(logFile, msg) } catch {}
+  debugLog("SSH", ...args)
 }
 
 /**
@@ -43,14 +69,20 @@ function ensureControlDir(): void {
   }
 }
 
+export function resolveSshControlPath(alias: string): string {
+  ensureControlDir()
+  const safe = alias.replace(/[^a-zA-Z0-9_.-]/g, "_")
+  return path.join(SSH_CONTROL_DIR, `${safe}.sock`)
+}
+
 /**
  * Build SSH options for connection reuse
  */
-function sshOptions(host: string): string[] {
-  ensureControlDir()
+function sshOptions(hostOrAlias: string): string[] {
+  const controlPath = resolveSshControlPath(hostOrAlias)
   return [
     "-o", "ControlMaster=auto",
-    "-o", `ControlPath=${SSH_CONTROL_DIR}/%r@%h:%p`,
+    "-o", `ControlPath=${controlPath}`,
     "-o", `ControlPersist=${SSH_CONTROL_PERSIST}`,
     "-o", "BatchMode=yes",
     "-o", `ConnectTimeout=${SSH_TIMEOUT}`,
@@ -489,8 +521,7 @@ export class SshControlManager {
   private statusMap = new Map<string, SshConnectionStatus>()
 
   getSocketPath(alias: string): string {
-    const safe = alias.replace(/[^a-zA-Z0-9_.-]/g, "_")
-    return path.join(SSH_CONTROL_DIR, `${safe}.sock`)
+    return resolveSshControlPath(alias)
   }
 
   getStatus(alias: string): SshConnectionStatus {
@@ -695,14 +726,26 @@ export class SshTmuxExecutor implements TmuxExecutor {
           "-o", "ControlMaster=no",
           "-o", `ControlPath=${socketPath}`,
           this.alias,
-          "mkdir", "-p", "~/.agent-view/scratchpads"
+          "mkdir", "-p", "~/.agent-view/scratchpads", "~/.agent-view/bin"
         ], { timeout: 3000 })
       execFileSync("ssh", [
         "-o", "ControlMaster=no",
         "-o", `ControlPath=${socketPath}`,
         this.alias,
+        "cat", ">", REMOTE_SCRATCHPAD_HELPER
+      ], { input: REMOTE_SCRATCHPAD_HELPER_CONTENT, timeout: 5000 })
+      execFileSync("ssh", [
+        "-o", "ControlMaster=no",
+        "-o", `ControlPath=${socketPath}`,
+        this.alias,
+        "chmod", "+x", REMOTE_SCRATCHPAD_HELPER
+      ], { timeout: 3000 })
+      execFileSync("ssh", [
+        "-o", "ControlMaster=no",
+        "-o", `ControlPath=${socketPath}`,
+        this.alias,
         "sh", "-lc",
-          `: >> ~/.agent-view/scratchpads/${sessionId}.md && tmux -L ${TMUX_SOCKET} set-option -g @agent_view_scratchpad_editor "\${EDITOR:-nano}" && tmux -L ${TMUX_SOCKET} set-option -t ${sessionName} @agent_view_scratchpad_path ~/.agent-view/scratchpads/${sessionId}.md && tmux -L ${TMUX_SOCKET} bind-key -n C-t run-shell 'tmux display-popup -w 70% -h 70% -E "#{@agent_view_scratchpad_editor} #{@agent_view_scratchpad_path}"' && tmux -L ${TMUX_SOCKET} set-option -t ${sessionName} status-right '#[fg=#89b4fa]Ctrl+Q#[fg=#6c7086] detach #[fg=#6c7086]| #[fg=#89b4fa]Ctrl+T#[fg=#6c7086] scratchpad' && tmux -L ${TMUX_SOCKET} set-option -t ${sessionName} status-right-length 160`
+          `: >> ~/.agent-view/scratchpads/${sessionId}.md && tmux -L ${TMUX_SOCKET} set-option -g @agent_view_scratchpad_editor "\${EDITOR:-vim}" && tmux -L ${TMUX_SOCKET} set-option -t ${sessionName} @agent_view_scratchpad_path ~/.agent-view/scratchpads/${sessionId}.md && tmux -L ${TMUX_SOCKET} bind-key -n C-t run-shell 'tmux display-popup -w 70% -h 70% -E "${REMOTE_SCRATCHPAD_HELPER} #{pane_id} #{@agent_view_scratchpad_editor} #{@agent_view_scratchpad_path}"' && tmux -L ${TMUX_SOCKET} set-option -t ${sessionName} status-right '#[fg=#89b4fa]Ctrl+Q#[fg=#6c7086] detach #[fg=#6c7086]| #[fg=#89b4fa]Ctrl+T#[fg=#6c7086] scratchpad' && tmux -L ${TMUX_SOCKET} set-option -t ${sessionName} status-right-length 160`
         ], { timeout: 5000 })
       }
 
