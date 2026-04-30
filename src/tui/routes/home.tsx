@@ -41,14 +41,10 @@ import {
   DEFAULT_GROUP_PATH,
   type GroupedItem
 } from "@tui/util/groups"
-import fs from "fs"
-import path from "path"
-import os from "os"
+import { debugLog } from "@/core/debug-log"
 
-const logFile = path.join(os.homedir(), ".agent-orchestrator", "debug.log")
 function log(...args: unknown[]) {
-  const msg = `[${new Date().toISOString()}] [HOME] ${args.map(a => typeof a === "object" ? JSON.stringify(a) : String(a)).join(" ")}\n`
-  try { fs.appendFileSync(logFile, msg) } catch {}
+  debugLog("HOME", ...args)
 }
 
 const LOGO = `
@@ -755,7 +751,6 @@ export function Home() {
       switch (props.session.status) {
         case "running": return theme.success
         case "waiting": return theme.warning
-        case "error": return theme.error
         case "hibernated": return theme.secondary
         case "offline": return theme.textMuted
         default: return theme.textMuted
@@ -865,7 +860,6 @@ export function Home() {
       switch (s.status) {
         case "running": return theme.success
         case "waiting": return theme.warning
-        case "error": return theme.error
         case "hibernated": return theme.secondary
         default: return theme.textMuted
       }

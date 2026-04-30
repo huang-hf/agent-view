@@ -9,6 +9,6 @@ export const STATUS_ICONS: Record<SessionStatus, string> = {
   waiting: "◐",
   idle: "○",
   stopped: "◻",
-  error: "✗",
-  hibernated: "◉"
+  hibernated: "◉",
+  offline: "◌"
 }
