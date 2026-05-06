@@ -35,3 +35,6 @@ coverage/
 
 # Git Worktrees
 .worktrees/
+
+# Local agent artifacts
+.superpowers/

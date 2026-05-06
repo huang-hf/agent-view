@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import {
   deriveRemoteSessionStatus,
+  stabilizeRunningTransition,
   stabilizeRemoteStoppedTransition,
   stabilizeRemoteWaitingTransition
 } from "./session"
@@ -70,6 +71,32 @@ describe("stabilizeRemoteStoppedTransition", () => {
   test("clears stop counter when candidate recovers", () => {
     const result = stabilizeRemoteStoppedTransition("running", "running", 2)
     expect(result.next).toBe("running")
+    expect(result.polls).toBe(0)
+  })
+})
+
+describe("stabilizeRunningTransition", () => {
+  test("keeps running on first transient idle poll", () => {
+    const result = stabilizeRunningTransition("running", "idle", 0, 3)
+    expect(result.next).toBe("running")
+    expect(result.polls).toBe(1)
+  })
+
+  test("exits running after grace polls", () => {
+    const result = stabilizeRunningTransition("running", "idle", 2, 3)
+    expect(result.next).toBe("idle")
+    expect(result.polls).toBe(0)
+  })
+
+  test("resets counter when back to running", () => {
+    const result = stabilizeRunningTransition("running", "running", 2, 3)
+    expect(result.next).toBe("running")
+    expect(result.polls).toBe(0)
+  })
+
+  test("does not delay transitions to waiting", () => {
+    const result = stabilizeRunningTransition("running", "waiting", 1, 3)
+    expect(result.next).toBe("waiting")
     expect(result.polls).toBe(0)
   })
 })

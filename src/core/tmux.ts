@@ -11,6 +11,8 @@ import { promisify } from "util"
 import path from "path"
 import os from "os"
 import fs from "fs"
+import { ensureScratchpad, resolveScratchpadEditor } from "./scratchpad"
+import { debugLog } from "./debug-log"
 
 // Lazy load node-pty to avoid import errors in test environments
 let pty: typeof import("node-pty") | null = null
@@ -71,6 +73,34 @@ import TMUX_CONF from "./tmux.conf" with { type: "text" }
 const TMUX_SOCKET = "agent-view"
 const CONFIG_DIR = path.join(os.homedir(), ".agent-view")
 const CONFIG_PATH = path.join(CONFIG_DIR, "tmux.conf")
+const BIN_DIR = path.join(CONFIG_DIR, "bin")
+const SCRATCHPAD_HELPER_PATH = path.join(BIN_DIR, "scratchpad-popup.sh")
+
+const SCRATCHPAD_POPUP_HELPER = `#!/usr/bin/env bash
+set -eu
+
+target_pane="\${1:-}"
+editor="\${2:-}"
+file_path="\${3:-}"
+
+if [ -z "\${target_pane}" ] || [ -z "\${editor}" ] || [ -z "\${file_path}" ]; then
+  exit 1
+fi
+
+mkdir -p "\$(dirname "\${file_path}")"
+touch "\${file_path}"
+
+export AGENT_VIEW_TARGET_PANE="\${target_pane}"
+editor_base="\${editor##*/}"
+
+if [ "\${editor_base}" = "vim" ] || [ "\${editor_base}" = "vi" ]; then
+  exec "\${editor}" \\
+    -c 'nnoremap <silent> <C-s> :call system("tmux send-keys -t " . shellescape($AGENT_VIEW_TARGET_PANE) . " -l " . shellescape(getline(".")))<Bar>q<CR>' \\
+    "\${file_path}"
+fi
+
+exec "\${editor}" "\${file_path}"
+`
 
 let configWritten = false
 
@@ -91,6 +121,20 @@ function ensureConfig(): void {
     }
     if (needsWrite) {
       fs.writeFileSync(CONFIG_PATH, TMUX_CONF, { mode: 0o600 })
+    }
+
+    if (!fs.existsSync(BIN_DIR)) {
+      fs.mkdirSync(BIN_DIR, { recursive: true, mode: 0o700 })
+    }
+    let helperNeedsWrite = true
+    try {
+      helperNeedsWrite = fs.readFileSync(SCRATCHPAD_HELPER_PATH, "utf-8") !== SCRATCHPAD_POPUP_HELPER
+    } catch {
+      // Helper script does not exist yet.
+    }
+    if (helperNeedsWrite) {
+      fs.writeFileSync(SCRATCHPAD_HELPER_PATH, SCRATCHPAD_POPUP_HELPER, { mode: 0o700 })
+      fs.chmodSync(SCRATCHPAD_HELPER_PATH, 0o700)
     }
   } finally {
     configWritten = true
@@ -113,6 +157,63 @@ function tmuxSpawnArgs(...args: string[]): string[] {
   return ["-L", TMUX_SOCKET, "-f", CONFIG_PATH, ...args]
 }
 
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\"'\"'`)}'`
+}
+
+export function buildScratchpadPopupCommand(options?: {
+  filePath?: string
+  editor?: string
+  targetPane?: string
+}): string {
+  const targetPane = options?.targetPane ?? "#{pane_id}"
+  const editor = options?.editor ?? "#{@agent_view_scratchpad_editor}"
+  const filePath = options?.filePath ?? "#{@agent_view_scratchpad_path}"
+  const launchCmd = `${shellQuote(SCRATCHPAD_HELPER_PATH)} ${shellQuote(targetPane)} ${shellQuote(editor)} ${shellQuote(filePath)}`
+  const popupCmd = `tmux display-popup -w 70% -h 70% -E ${shellQuote(launchCmd)}`
+  return `run-shell ${shellQuote(popupCmd)}`
+}
+
+export function buildScratchpadPopupKeyBinding(options?: {
+  filePath?: string
+  editor?: string
+}): string {
+  return `bind-key -n C-t ${buildScratchpadPopupCommand(options)}`
+}
+
+export async function installScratchpadBinding(
+  sessionName: string,
+  sessionId: string
+): Promise<void> {
+  const editor = resolveScratchpadEditor()
+  if (!editor) {
+    debugLog("TMUX", `scratchpad skipped for ${sessionName}: no editor`)
+    return
+  }
+
+  const filePath = ensureScratchpad(sessionId)
+  debugLog("TMUX", `installScratchpadBinding session=${sessionName} sessionId=${sessionId} editor=${editor} path=${filePath}`)
+  await execFileAsync(
+    "tmux",
+    tmuxSpawnArgs("set-option", "-g", "@agent_view_scratchpad_editor", editor)
+  ).catch(() => {})
+  await execFileAsync(
+    "tmux",
+    tmuxSpawnArgs("set-option", "-t", sessionName, "@agent_view_scratchpad_path", filePath)
+  ).catch(() => {})
+  await execFileAsync(
+    "tmux",
+    tmuxSpawnArgs("set-option", "-t", sessionName, "status-right", "#[fg=#89b4fa]Ctrl+Q#[fg=#6c7086] detach #[fg=#6c7086]| #[fg=#89b4fa]Ctrl+T#[fg=#6c7086] scratchpad")
+  ).catch(() => {})
+  await execFileAsync(
+    "tmux",
+    tmuxSpawnArgs("set-option", "-t", sessionName, "status-right-length", "160")
+  ).catch(() => {})
+  await execFileAsync(
+    "tmux",
+    tmuxSpawnArgs("bind-key", "-n", "C-t", "run-shell", `tmux display-popup -w 70% -h 70% -E '${SCRATCHPAD_HELPER_PATH} #{pane_id} #{@agent_view_scratchpad_editor} #{@agent_view_scratchpad_path}'`)
+  ).catch(() => {})
+}
 // Session cache - reduces subprocess spawns
 interface SessionCache {
   data: Map<string, number> // session_name -> activity_timestamp
@@ -543,6 +644,16 @@ const ERROR_PATTERNS = [
   /panic:/i
 ]
 
+// Codex output may contain warning lines like "MCP ... failed to start" that
+// don't indicate the agent session itself is broken. Keep error detection strict.
+const CODEX_ERROR_PATTERNS = [
+  /error:/i,
+  /exception:/i,
+  /traceback/i,
+  /panic:/i,
+  /fatal:/i,
+]
+
 /**
  * Check if output contains spinner characters (Claude is processing)
  */
@@ -616,7 +727,8 @@ export function parseToolStatusDebug(output: string, tool?: string): ToolStatusD
     if (matchedWaiting) waitingReason = matchedWaiting.source
   }
 
-  const matchedError = ERROR_PATTERNS.find(p => p.test(lastLines))
+  const errorPatterns = tool === "codex" ? CODEX_ERROR_PATTERNS : ERROR_PATTERNS
+  const matchedError = errorPatterns.find(p => p.test(lastLines))
   hasError = !!matchedError
   if (matchedError) errorReason = matchedError.source
 

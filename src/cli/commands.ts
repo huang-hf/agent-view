@@ -13,7 +13,7 @@ import { existsSync } from "fs"
 import path from "path"
 
 const VALID_TOOLS = ["claude", "opencode", "gemini", "codex", "custom", "shell"]
-const VALID_STATUSES = ["running", "waiting", "idle", "stopped", "hibernated"]
+const VALID_STATUSES = ["running", "waiting", "idle", "stopped", "hibernated", "offline"]
 
 function resolveSessionId(idOrTitle: string): string | null {
   const storage = getStorage()
@@ -60,6 +60,7 @@ function statusColor(status: string): string {
     case "idle": return "\x1b[34m"     // blue
     case "stopped": return "\x1b[90m"  // gray
     case "hibernated": return "\x1b[36m" // cyan
+    case "offline": return "\x1b[90m" // gray
     default: return ""
   }
 }

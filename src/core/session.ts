@@ -12,17 +12,14 @@ import { getSshManager, SshTmuxExecutor } from "./ssh"
 import { removeWorktree } from "./git"
 import { randomUUID } from "crypto"
 import path from "path"
-import fs from "fs"
-import os from "os"
 import { buildClaudeCommand } from "./claude"
 import { getConfig, saveConfig } from "./config"
 import { paginateTranscript, type TranscriptPageOptions } from "./transcript"
 import { deleteScratchpad } from "./scratchpad"
+import { debugLog } from "./debug-log"
 
-const logFile = path.join(os.homedir(), ".agent-orchestrator", "debug.log")
 function log(...args: unknown[]) {
-  const msg = `[${new Date().toISOString()}] [SESSION] ${args.map(a => typeof a === "object" ? JSON.stringify(a) : String(a)).join(" ")}\n`
-  try { fs.appendFileSync(logFile, msg) } catch {}
+  debugLog("SESSION", ...args)
 }
 
 // Name generation patterns
@@ -47,6 +44,7 @@ function generateTitle(): string {
 const LOCAL_WAITING_EXIT_GRACE_POLLS = 2
 const REMOTE_WAITING_EXIT_GRACE_POLLS = 2
 const REMOTE_STOP_GRACE_POLLS = 3
+const RUNNING_EXIT_GRACE_POLLS = 3
 
 function deriveLocalSessionStatus(status: tmux.ToolStatus, isActive: boolean): SessionStatus {
   if (status.isWaiting) return "waiting"
@@ -119,12 +117,36 @@ export function stabilizeRemoteStoppedTransition(
 
   return { next: "stopped", polls: 0 }
 }
+
+export function stabilizeRunningTransition(
+  previous: SessionStatus,
+  candidate: SessionStatus,
+  polls: number,
+  gracePolls = RUNNING_EXIT_GRACE_POLLS
+): { next: SessionStatus; polls: number } {
+  if (candidate !== "idle") {
+    return { next: candidate, polls: 0 }
+  }
+
+  if (previous !== "running") {
+    return { next: candidate, polls: 0 }
+  }
+
+  const nextPolls = polls + 1
+  if (nextPolls < gracePolls) {
+    return { next: "running", polls: nextPolls }
+  }
+
+  return { next: "idle", polls: 0 }
+}
 export class SessionManager {
   private refreshInterval: NodeJS.Timeout | null = null
   private refreshInFlight = false
+  private pauseRefreshUntil = 0
   private memoryMap = new Map<string, number>() // sessionId → KB
   private _recentAutoHibernated: { id: string; title: string; idleMinutes: number }[] = []
   private localWaitingExitPolls = new Map<string, number>() // sessionId -> consecutive non-waiting polls
+  private runningExitPolls = new Map<string, number>() // sessionId -> consecutive idle candidates after running
 
   private stabilizeLocalWaitingStatus(
     sessionId: string,
@@ -135,6 +157,18 @@ export class SessionManager {
     const resolved = stabilizeWaitingTransition(previous, candidate, currentPolls)
     if (resolved.polls > 0) this.localWaitingExitPolls.set(sessionId, resolved.polls)
     else this.localWaitingExitPolls.delete(sessionId)
+    return resolved.next
+  }
+
+  private stabilizeRunningStatus(
+    sessionId: string,
+    previous: SessionStatus,
+    candidate: SessionStatus
+  ): SessionStatus {
+    const currentPolls = this.runningExitPolls.get(sessionId) || 0
+    const resolved = stabilizeRunningTransition(previous, candidate, currentPolls)
+    if (resolved.polls > 0) this.runningExitPolls.set(sessionId, resolved.polls)
+    else this.runningExitPolls.delete(sessionId)
     return resolved.next
   }
 
@@ -191,6 +225,18 @@ export class SessionManager {
     return resolved.next
   }
 
+  private writeStatusIfChanged(
+    storage: ReturnType<typeof getStorage>,
+    sessionId: string,
+    previous: SessionStatus,
+    next: SessionStatus,
+    tool: Tool
+  ): boolean {
+    if (next === previous) return false
+    storage.writeStatus(sessionId, next, tool)
+    return true
+  }
+
   remoteSessionExists(host: string, name: string): boolean {
     return this.remoteSessionCaches.get(host)?.has(name) ?? false
   }
@@ -223,6 +269,7 @@ export class SessionManager {
       // This prevents multiple concurrent instances from overwriting each other
       const isPrimary = storage.electPrimary(15)
       if (!isPrimary || this.refreshInFlight) return
+      if (Date.now() < this.pauseRefreshUntil) return
       this.refreshInFlight = true
       try {
         await this.refreshStatuses()
@@ -233,6 +280,13 @@ export class SessionManager {
 
     // Store heartbeat interval so we can clear it on stop
     ;(this as any)._heartbeatInterval = heartbeatInterval
+  }
+
+  private pauseRefresh(ms = 2000): void {
+    const until = Date.now() + ms
+    if (until > this.pauseRefreshUntil) {
+      this.pauseRefreshUntil = until
+    }
   }
 
   stopRefreshLoop(): void {
@@ -259,6 +313,7 @@ export class SessionManager {
 
     const config = getConfig()
     const autoHibernateMs = (config.autoHibernateMinutes || 0) * 60 * 1000
+    let changed = false
 
     for (const session of localSessions) {
       if (!session.tmuxSession) continue
@@ -269,7 +324,7 @@ export class SessionManager {
       const exists = tmux.sessionExists(session.tmuxSession)
       if (!exists) {
         // Session was killed externally
-        storage.writeStatus(session.id, "stopped", session.tool)
+        changed = this.writeStatusIfChanged(storage, session.id, session.status, "stopped", session.tool) || changed
         continue
       }
 
@@ -286,8 +341,9 @@ export class SessionManager {
         const status = tmux.parseToolStatus(output, session.tool)
 
         const candidate = deriveLocalSessionStatus(status, isActive)
-        const next = this.stabilizeLocalWaitingStatus(session.id, session.status, candidate)
-        storage.writeStatus(session.id, next, session.tool)
+        const waitingStable = this.stabilizeLocalWaitingStatus(session.id, session.status, candidate)
+        const next = this.stabilizeRunningStatus(session.id, session.status, waitingStable)
+        changed = this.writeStatusIfChanged(storage, session.id, session.status, next, session.tool) || changed
 
         if (next === "idle") {
           // No recent activity and no waiting prompt - idle
@@ -313,7 +369,8 @@ export class SessionManager {
         }
       } catch {
         // Fallback: use activity-based detection if capture fails
-        storage.writeStatus(session.id, isActive ? "running" : "idle", session.tool)
+        const fallback = this.stabilizeRunningStatus(session.id, session.status, isActive ? "running" : "idle")
+        changed = this.writeStatusIfChanged(storage, session.id, session.status, fallback, session.tool) || changed
       }
     }
 
@@ -387,7 +444,7 @@ export class SessionManager {
               log("has-session FAILED for", session.id, "tmux=", session.tmuxSession, "err=", String(err))
             }
             const stabilized = this.stabilizeRemoteStoppedStatus(session.id, session.status, candidate)
-            storage.writeStatus(session.id, stabilized, session.tool)
+            changed = this.writeStatusIfChanged(storage, session.id, session.status, stabilized, session.tool) || changed
             continue
           }
 
@@ -398,8 +455,9 @@ export class SessionManager {
             const status = tmux.parseToolStatus(output, session.tool)
             const candidate = deriveRemoteSessionStatus(status)
             const waitingStable = this.stabilizeRemoteWaitingStatus(session.id, session.status, candidate)
-            const next = this.stabilizeRemoteStoppedStatus(session.id, session.status, waitingStable)
-            storage.writeStatus(session.id, next, session.tool)
+            const runningStable = this.stabilizeRunningStatus(session.id, session.status, waitingStable)
+            const next = this.stabilizeRemoteStoppedStatus(session.id, session.status, runningStable)
+            changed = this.writeStatusIfChanged(storage, session.id, session.status, next, session.tool) || changed
           } catch (err) {
             log("capture-pane failed for session:", session.id, "host:", host, err)
             // Don't overwrite status — preserve current status on transient failure
@@ -410,7 +468,9 @@ export class SessionManager {
       }
     }
 
-    storage.touch()
+    if (changed) {
+      storage.touch()
+    }
 
     // Collect memory usage for local running sessions only
     const tmuxNames = localSessions
@@ -427,6 +487,7 @@ export class SessionManager {
   }
 
   async create(options: SessionCreateOptions): Promise<Session> {
+    this.pauseRefresh()
     log("create() called with options:", options)
     const storage = getStorage()
     const now = new Date()
@@ -532,7 +593,9 @@ export class SessionManager {
     storage.touch()
 
     // Auto-save as recent for future quick access
-    await this.saveRecent(options)
+    this.saveRecent(options).catch((err) => {
+      log("saveRecent failed:", err)
+    })
 
     return session
   }
@@ -563,14 +626,17 @@ export class SessionManager {
   }
 
   async delete(sessionId: string, options?: { deleteWorktree?: boolean }): Promise<void> {
+    this.pauseRefresh()
     const storage = getStorage()
     const session = storage.getSession(sessionId)
 
     if (session?.tmuxSession) {
       if (session.remoteHost) {
         const executor = this.getExecutor(session.remoteHost)
-        await executor.exec(["kill-session", "-t", session.tmuxSession]).catch(() => {})
-        await executor.exec(["run-shell", "-b", `rm -f ~/.agent-view/scratchpads/${sessionId}.md`]).catch(() => {})
+        await Promise.all([
+          executor.exec(["kill-session", "-t", session.tmuxSession]).catch(() => {}),
+          executor.exec(["run-shell", "-b", `rm -f ~/.agent-view/scratchpads/${sessionId}.md`]).catch(() => {})
+        ])
       } else {
         await tmux.killSession(session.tmuxSession)
       }
@@ -590,6 +656,7 @@ export class SessionManager {
   }
 
   async resume(sessionId: string): Promise<Session> {
+    this.pauseRefresh()
     const storage = getStorage()
     const session = storage.getSession(sessionId)
 
@@ -642,6 +709,7 @@ export class SessionManager {
   }
 
   async restart(sessionId: string): Promise<Session> {
+    this.pauseRefresh()
     const storage = getStorage()
     const session = storage.getSession(sessionId)
 
@@ -701,6 +769,7 @@ export class SessionManager {
    * Stop a session (kill tmux but keep record)
    */
   async stop(sessionId: string): Promise<void> {
+    this.pauseRefresh()
     const storage = getStorage()
     const session = storage.getSession(sessionId)
 
@@ -724,6 +793,7 @@ export class SessionManager {
    * Only works for Claude sessions with a claudeSessionId.
    */
   async hibernate(sessionId: string): Promise<void> {
+    this.pauseRefresh()
     const storage = getStorage()
     const session = storage.getSession(sessionId)
 

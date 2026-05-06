@@ -18,6 +18,24 @@
       --blue-1: #3b82f6;
       --blue-2: #60a5fa;
       --cyan-1: #22d3ee;
+
+      --surface-0: #081225;
+      --surface-1: #0b152a;
+      --surface-2: #0f1c35;
+      --surface-3: #132445;
+
+      --glass-1: rgba(255,255,255,0.04);
+      --glass-2: rgba(255,255,255,0.02);
+      --glass-3: rgba(255,255,255,0.06);
+
+      --radius-s: 10px;
+      --radius-m: 14px;
+      --radius-l: 16px;
+
+      --shadow-1: 0 10px 30px rgba(0,0,0,0.35);
+      --shadow-2: 0 18px 50px rgba(0,0,0,0.42);
+      --ring: 0 0 0 3px rgba(34,211,238,0.22);
+      --ring-accent: 0 0 0 3px rgba(50,215,162,0.25);
     }
 
     * { box-sizing: border-box; }
@@ -41,6 +59,8 @@
       min-height: 100vh;
     }
 
+    a { color: inherit; }
+
     .app {
       width: 100%;
       max-width: 980px;
@@ -52,14 +72,23 @@
     }
 
     .card {
+      background-color: rgba(15, 28, 53, 0.55);
       background:
         linear-gradient(135deg, rgba(96,165,250,0.12), rgba(50,215,162,0.05) 38%, rgba(255,255,255,0.02) 85%),
         linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015));
       border: 1px solid var(--border);
-      border-radius: 14px;
+      border-radius: var(--radius-m);
       padding: 12px;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+      box-shadow: var(--shadow-1);
       min-width: 0;
+      transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+    }
+
+    @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+      .card {
+        -webkit-backdrop-filter: blur(10px);
+        backdrop-filter: blur(10px);
+      }
     }
 
     .row { display: flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%; }
@@ -71,9 +100,11 @@
 
     button {
       border: 1px solid var(--border);
-      background: var(--panel-soft);
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02)),
+        var(--surface-3);
       color: var(--text);
-      border-radius: 10px;
+      border-radius: var(--radius-s);
       padding: 10px 14px;
       font-size: 14px;
       line-height: 1.2;
@@ -82,24 +113,54 @@
       cursor: pointer;
       max-width: 100%;
       touch-action: manipulation;
+      transition: transform 140ms ease, border-color 140ms ease, background 140ms ease, box-shadow 140ms ease, opacity 140ms ease;
+    }
+
+    button:hover {
+      border-color: rgba(96,165,250,0.35);
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.025)),
+        var(--surface-3);
+    }
+
+    button:active {
+      transform: translateY(1px);
+    }
+
+    button:focus-visible {
+      outline: none;
+      box-shadow: var(--ring), var(--shadow-1);
+      border-color: rgba(34,211,238,0.45);
     }
 
     button.primary {
-      border-color: #2c8e63;
-      background: linear-gradient(180deg, #33b57c, #1e7f57);
+      border-color: rgba(50,215,162,0.55);
+      background:
+        radial-gradient(700px 220px at 10% 0%, rgba(50,215,162,0.22), rgba(50,215,162,0) 60%),
+        linear-gradient(180deg, rgba(51,181,124,0.92), rgba(30,127,87,0.92));
     }
+    button.primary:hover { border-color: rgba(50,215,162,0.75); }
+    button.primary:focus-visible { box-shadow: var(--ring-accent), var(--shadow-1); }
+
     button.warning {
-      border-color: #8f6920;
-      background: linear-gradient(180deg, #e3b14e, #b47d1a);
+      border-color: rgba(255,203,102,0.58);
+      background:
+        radial-gradient(700px 220px at 10% 0%, rgba(255,203,102,0.24), rgba(255,203,102,0) 60%),
+        linear-gradient(180deg, rgba(227,177,78,0.96), rgba(180,125,26,0.96));
       color: #1d1405;
       font-weight: 700;
     }
+    button.warning:hover { border-color: rgba(255,203,102,0.8); }
+
     button.danger {
-      border-color: #8b3542;
-      background: linear-gradient(180deg, #dc6578, #b73c4f);
+      border-color: rgba(255,122,138,0.55);
+      background:
+        radial-gradient(700px 220px at 10% 0%, rgba(255,122,138,0.22), rgba(255,122,138,0) 60%),
+        linear-gradient(180deg, rgba(220,101,120,0.96), rgba(183,60,79,0.96));
       color: #fff5f7;
       font-weight: 700;
     }
+    button.danger:hover { border-color: rgba(255,122,138,0.8); }
 
     button:disabled { opacity: 0.5; cursor: not-allowed; }
 
@@ -126,6 +187,7 @@
       color: var(--muted);
       flex-shrink: 0;
       background: rgba(255,255,255,0.03);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
     }
 
     .dot {
@@ -171,14 +233,22 @@
       word-break: break-word;
       overflow-wrap: anywhere;
       max-width: 100%;
+      scrollbar-gutter: stable;
     }
 
     .transcript-line {
       display: block;
+      padding: 1px 8px 1px 10px;
+      margin: 1px 0;
+      border-radius: 8px;
+      position: relative;
     }
 
     .transcript-line.is-command {
-      color: #8ec5ff;
+      color: #b9dcff;
+      background: rgba(59,130,246,0.12);
+      border: 1px solid rgba(59,130,246,0.22);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
     }
 
     .transcript-line.is-status-good {
@@ -186,16 +256,25 @@
     }
 
     .transcript-line.is-status-bad {
-      color: #ff9aa7;
+      color: #ffd1d8;
+      background: rgba(255,122,138,0.12);
+      border: 1px solid rgba(255,122,138,0.22);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
     }
 
     .transcript-line.is-status-warn {
-      color: #ffd98b;
+      color: #ffe3a7;
+      background: rgba(255,203,102,0.12);
+      border: 1px solid rgba(255,203,102,0.22);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
     }
 
     .transcript-line.is-prompt {
-      color: #7dd3fc;
+      color: #b9dcff;
       font-weight: 700;
+      background: rgba(34,211,238,0.10);
+      border: 1px solid rgba(34,211,238,0.22);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
     }
 
     .transcript-line.is-muted {
@@ -211,16 +290,34 @@
       font-style: italic;
     }
 
+    .tok-path {
+      color: #c8fbff;
+      background: rgba(34,211,238,0.12);
+      border: 1px solid rgba(34,211,238,0.22);
+      border-radius: 6px;
+      padding: 0 4px;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+    }
+
     .input {
       width: 100%;
       max-width: 100%;
       border: 1px solid var(--border);
       border-radius: 10px;
-      background: #0c1628;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015)),
+        #0c1628;
       color: var(--text);
       padding: 10px;
       font: 16px/1.4 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       min-height: 76px;
+      transition: border-color 140ms ease, box-shadow 140ms ease, background 140ms ease;
+    }
+
+    .input:focus-visible {
+      outline: none;
+      border-color: rgba(34,211,238,0.45);
+      box-shadow: var(--ring), var(--shadow-1);
     }
 
     @media (pointer: coarse) {
@@ -266,6 +363,18 @@
       border: 1px solid var(--border);
       border-radius: 16px;
       padding: 12px;
+      box-shadow: var(--shadow-2);
+    }
+
+    @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+      .modal {
+        -webkit-backdrop-filter: blur(8px);
+        backdrop-filter: blur(8px);
+      }
+      .modal-panel {
+        -webkit-backdrop-filter: blur(10px);
+        backdrop-filter: blur(10px);
+      }
     }
 
     .group {
@@ -286,7 +395,10 @@
       padding: 12px;
       min-height: 48px;
       font-size: 15px;
+      transition: background 140ms ease, filter 140ms ease;
     }
+    .group-head:hover { filter: brightness(1.06); }
+    .group-head:focus-visible { outline: none; box-shadow: var(--ring); }
 
     .group-sessions { display: grid; }
 
@@ -300,7 +412,10 @@
       min-height: 48px;
       font-size: 15px;
       background: rgba(255,255,255,0.01);
+      transition: background 140ms ease, filter 140ms ease;
     }
+
+    .session-row:hover { background: rgba(255,255,255,0.02); }
 
     .session-row.active {
       background: linear-gradient(135deg, rgba(59,130,246,0.33), rgba(34,211,238,0.12));
@@ -317,7 +432,9 @@
       border-radius: 10px;
       background: linear-gradient(135deg, rgba(255,203,102,0.18), rgba(255,122,138,0.08) 55%, rgba(255,255,255,0.02));
       margin-top: 8px;
+      transition: border-color 140ms ease, filter 140ms ease, background 140ms ease;
     }
+    .inbox-item:hover { filter: brightness(1.05); border-color: rgba(255,203,102,0.35); }
 
     .inbox-clear {
       flex: 0 0 auto;
@@ -601,11 +718,31 @@
       let lastIndex = 0
       let match = null
 
+      const pathRe = /(?:\b[A-Za-z]:\\[^\s"'<>]+|\B~\/[^\s"'<>]+|(?:\B\.{1,2}\/|\B\/)[^\s"'<>]+|\b(?:[A-Za-z0-9_.-]+\/)+[A-Za-z0-9_.-]+\.[A-Za-z0-9]+(?:\:\d+(?:\:\d+)?)?(?:#L\d+(?:C\d+)?)?)/g
+      function escWithPathTokens(chunk) {
+        const raw = String(chunk || "")
+        if (!raw) return ""
+        let res = ""
+        let i = 0
+        let m = null
+        while ((m = pathRe.exec(raw)) !== null) {
+          const start = m.index
+          const end = start + m[0].length
+          const prefix = raw.slice(Math.max(0, start - 8), start).toLowerCase()
+          if (prefix.endsWith("http://") || prefix.endsWith("https://")) continue
+          if (start > i) res += esc(raw.slice(i, start))
+          res += `<span class="tok-path">${esc(m[0])}</span>`
+          i = end
+        }
+        if (i < raw.length) res += esc(raw.slice(i))
+        return res
+      }
+
       while ((match = sgrRe.exec(text)) !== null) {
         const chunk = text.slice(lastIndex, match.index)
         if (chunk) {
           const style = cssFromAnsiState(state)
-          const safe = esc(chunk)
+          const safe = escWithPathTokens(chunk)
           out += style ? `<span style="${style}">${safe}</span>` : safe
         }
         const rawCodes = (match[1] || "").split(";").filter(Boolean).map((n) => Number.parseInt(n, 10))
@@ -616,7 +753,7 @@
       const tail = text.slice(lastIndex)
       if (tail) {
         const style = cssFromAnsiState(state)
-        const safe = esc(tail)
+        const safe = escWithPathTokens(tail)
         out += style ? `<span style="${style}">${safe}</span>` : safe
       }
       return out
@@ -627,7 +764,7 @@
       const trimmed = text.trim()
       if (!trimmed) return "transcript-line"
       if (/^[-_=─━]{20,}$/.test(trimmed)) return "transcript-line is-divider"
-      if (/^(⏺|Bash\(|curl\b|❯|>|[$#]\s)/.test(trimmed)) return "transcript-line is-command"
+      if (/^(⏺|Bash\(|curl\b|[›❯]|[$#]\s|>\s)/.test(trimmed)) return "transcript-line is-command"
       if (/(\.\.\. \+\d+ lines|\(ctrl\+o to expand\)|for shortcuts|new task\?)/i.test(trimmed)) return "transcript-line is-muted"
       if (/\b(status:\s*(live|running|ok|approved|upcoming|success)|approved\b|created:)\b/i.test(trimmed)) return "transcript-line is-status-good"
       if (/\b(error|failed|exception|quota|cancelled|denied|insufficient|invalid|stopped|churned)\b/i.test(trimmed)) return "transcript-line is-status-bad"
@@ -758,14 +895,13 @@
             key,
             name: key,
             sessions: [],
-            stats: { running: 0, waiting: 0, error: 0 }
+            stats: { running: 0, waiting: 0 }
           })
         }
         const g = map.get(key)
         g.sessions.push(s)
         if (s.status === "running") g.stats.running += 1
         if (s.status === "waiting") g.stats.waiting += 1
-        if (s.status === "error") g.stats.error += 1
       }
 
       return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name))
@@ -814,7 +950,7 @@
         el.switcherGroups.innerHTML = groups.map(g => `
           <button class="group-head row between" data-open-group="${esc(g.key)}" style="margin-top:8px; border-radius:10px;">
             <span>${esc(g.name)}</span>
-            <span class="meta">${g.sessions.length} · ●${g.stats.running} ◐${g.stats.waiting} ✗${g.stats.error}</span>
+            <span class="meta">${g.sessions.length} · ●${g.stats.running} ◐${g.stats.waiting}</span>
           </button>
         `).join("")
 
