@@ -755,7 +755,6 @@ export function Home() {
       switch (props.session.status) {
         case "running": return theme.success
         case "waiting": return theme.warning
-        case "error": return theme.error
         case "hibernated": return theme.secondary
         case "offline": return theme.textMuted
         default: return theme.textMuted
@@ -865,7 +864,6 @@ export function Home() {
       switch (s.status) {
         case "running": return theme.success
         case "waiting": return theme.warning
-        case "error": return theme.error
         case "hibernated": return theme.secondary
         default: return theme.textMuted
       }

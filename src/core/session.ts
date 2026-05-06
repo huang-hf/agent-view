@@ -50,7 +50,6 @@ const REMOTE_STOP_GRACE_POLLS = 3
 
 function deriveLocalSessionStatus(status: tmux.ToolStatus, isActive: boolean): SessionStatus {
   if (status.isWaiting) return "waiting"
-  if (status.hasError) return "error"
   if (status.isBusy || isActive) return "running"
   return "idle"
 }
@@ -77,7 +76,6 @@ export function deriveRemoteSessionStatus(
   status: tmux.ToolStatus
 ): SessionStatus {
   if (status.isWaiting) return "waiting"
-  if (status.hasError) return "error"
   if (status.isBusy) return "running"
   return "idle"
 }
@@ -919,7 +917,6 @@ export class SessionManager {
     waiting: Session[]
     idle: Session[]
     stopped: Session[]
-    error: Session[]
     hibernated: Session[]
     offline: Session[]
   } {
@@ -929,7 +926,6 @@ export class SessionManager {
       waiting: sessions.filter((s) => s.status === "waiting"),
       idle: sessions.filter((s) => s.status === "idle"),
       stopped: sessions.filter((s) => s.status === "stopped"),
-      error: sessions.filter((s) => s.status === "error"),
       hibernated: sessions.filter((s) => s.status === "hibernated"),
       offline: sessions.filter((s) => s.status === "offline")
     }

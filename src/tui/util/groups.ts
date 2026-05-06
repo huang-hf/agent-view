@@ -127,13 +127,11 @@ export function getGroupSessionCount(sessions: Session[], groupPath: string): nu
 export function getGroupStatusSummary(sessions: Session[], groupPath: string): {
   running: number
   waiting: number
-  error: number
 } {
   const groupSessions = sessions.filter(s => (s.groupPath || DEFAULT_GROUP_PATH) === groupPath)
   return {
     running: groupSessions.filter(s => s.status === "running").length,
-    waiting: groupSessions.filter(s => s.status === "waiting").length,
-    error: groupSessions.filter(s => s.status === "error").length
+    waiting: groupSessions.filter(s => s.status === "waiting").length
   }
 }
 

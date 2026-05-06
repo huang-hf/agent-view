@@ -10,6 +10,11 @@ import os from "os"
 import fs from "fs"
 import type { Session, Group, StatusUpdate, Tool, SessionStatus } from "./types"
 
+function normalizeSessionStatus(status: string): SessionStatus {
+  if (status === "error") return "idle"
+  return status as SessionStatus
+}
+
 const SCHEMA_VERSION = 2
 
 export interface StorageOptions {
@@ -228,7 +233,7 @@ export class Storage {
       command: row.command,
       wrapper: row.wrapper,
       tool: row.tool as Tool,
-      status: row.status as SessionStatus,
+      status: normalizeSessionStatus(row.status),
       tmuxSession: row.tmux_session,
       createdAt: new Date(row.created_at),
       lastAccessed: new Date(row.last_accessed),
@@ -264,7 +269,7 @@ export class Storage {
       command: row.command,
       wrapper: row.wrapper,
       tool: row.tool as Tool,
-      status: row.status as SessionStatus,
+      status: normalizeSessionStatus(row.status),
       tmuxSession: row.tmux_session,
       createdAt: new Date(row.created_at),
       lastAccessed: new Date(row.last_accessed),
@@ -319,7 +324,7 @@ export class Storage {
     for (const row of rows) {
       result.set(row.id, {
         sessionId: row.id,
-        status: row.status as SessionStatus,
+        status: normalizeSessionStatus(row.status),
         tool: row.tool as Tool,
         acknowledged: row.acknowledged === 1
       })

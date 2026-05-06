@@ -13,7 +13,7 @@ import { existsSync } from "fs"
 import path from "path"
 
 const VALID_TOOLS = ["claude", "opencode", "gemini", "codex", "custom", "shell"]
-const VALID_STATUSES = ["running", "waiting", "idle", "stopped", "error", "hibernated"]
+const VALID_STATUSES = ["running", "waiting", "idle", "stopped", "hibernated"]
 
 function resolveSessionId(idOrTitle: string): string | null {
   const storage = getStorage()
@@ -58,7 +58,6 @@ function statusColor(status: string): string {
     case "running": return "\x1b[32m"  // green
     case "waiting": return "\x1b[33m"  // yellow
     case "idle": return "\x1b[34m"     // blue
-    case "error": return "\x1b[31m"    // red
     case "stopped": return "\x1b[90m"  // gray
     case "hibernated": return "\x1b[36m" // cyan
     default: return ""
@@ -355,24 +354,6 @@ export async function cmdSend(id: string, message: string): Promise<void> {
   const manager = new SessionManager()
   await manager.sendMessage(resolvedId, message)
   console.log(`Sent to ${session.title}: ${message.length > 80 ? message.slice(0, 80) + "..." : message}`)
-}
-
-export async function cmdAcknowledge(id: string): Promise<void> {
-  const resolvedId = resolveSessionId(id)
-  if (!resolvedId) {
-    process.stderr.write(`Error: Session '${id}' not found\n`)
-    process.exit(3)
-  }
-
-  const session = getStorage().getSession(resolvedId)
-  if (!session) {
-    process.stderr.write(`Error: Session '${id}' not found\n`)
-    process.exit(3)
-  }
-
-  const manager = new SessionManager()
-  manager.acknowledge(resolvedId)
-  console.log(`Acknowledged session: ${session.title}`)
 }
 
 export async function cmdConfirm(id: string): Promise<void> {
