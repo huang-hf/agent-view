@@ -9,11 +9,12 @@
  *   1. Builds source (TypeScript + Solid)
  *   2. Compiles to a standalone binary for the current platform
  *   3. Copies binary to ~/.agent-view/bin/agent-view
- *   4. Re-signs with ad-hoc codesign (macOS) to fix "killed" on launch
+ *   4. Updates ~/.local/bin/agent-view and ~/.local/bin/av to point to it
+ *   5. Re-signs with ad-hoc codesign (macOS) to fix "killed" on launch
  */
 
 import path from "path"
-import { mkdir, copyFile, chmod } from "fs/promises"
+import { mkdir, copyFile, chmod, rm, symlink } from "fs/promises"
 import { existsSync } from "fs"
 import solidPlugin from "@opentui/solid/bun-plugin"
 import { $ } from "bun"
@@ -23,7 +24,11 @@ const dir = path.resolve(import.meta.dir, "..")
 process.chdir(dir)
 
 const DIST_DIR = path.join(dir, "dist")
-const INSTALL_BIN = path.join(os.homedir(), ".agent-view", "bin", "agent-view")
+const HOME = os.homedir()
+const INSTALL_BIN = path.join(HOME, ".agent-view", "bin", "agent-view")
+const LOCAL_BIN_DIR = path.join(HOME, ".local", "bin")
+const LOCAL_AGENT_VIEW = path.join(LOCAL_BIN_DIR, "agent-view")
+const LOCAL_AV = path.join(LOCAL_BIN_DIR, "av")
 
 // Step 1: Build source
 console.log("📦 Building source...")
@@ -74,10 +79,19 @@ await copyFile(tmpBin, INSTALL_BIN)
 await chmod(INSTALL_BIN, 0o755)
 await $`rm -f ${tmpBin}`
 
-// Step 4: Re-sign on macOS (prevents "killed" due to invalid signature)
+// Step 4: Refresh user-facing command entrypoints
+await mkdir(LOCAL_BIN_DIR, { recursive: true })
+for (const linkPath of [LOCAL_AGENT_VIEW, LOCAL_AV]) {
+  await rm(linkPath, { force: true })
+  await symlink(INSTALL_BIN, linkPath)
+}
+
+// Step 5: Re-sign on macOS (prevents "killed" due to invalid signature)
 if (process.platform === "darwin") {
   console.log("🔏 Re-signing binary (macOS)...")
   await $`codesign --sign - --force ${INSTALL_BIN}`
 }
 
 console.log(`✅ Installed to ${INSTALL_BIN}`)
+console.log(`🔗 Linked ${LOCAL_AGENT_VIEW} -> ${INSTALL_BIN}`)
+console.log(`🔗 Linked ${LOCAL_AV} -> ${INSTALL_BIN}`)

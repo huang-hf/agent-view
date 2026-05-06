@@ -6,7 +6,7 @@
  * to avoid conflicts with the user's tmux configuration.
  */
 
-import { spawn, exec, execFile, execFileSync } from "child_process"
+import { spawn, exec, execFile } from "child_process"
 import { promisify } from "util"
 import path from "path"
 import os from "os"
@@ -35,12 +35,15 @@ export interface TmuxExecutor {
   /** Run a tmux subcommand that produces no relevant output */
   execFile(args: string[]): Promise<void>
   /** Full-screen attach (replaces current terminal process) */
-  spawnAttach(sessionName: string, options?: { sessionId?: string }): Promise<void>
+  spawnAttach(sessionName: string): void
 }
 
 export class LocalTmuxExecutor implements TmuxExecutor {
   async exec(args: string[]): Promise<string> {
-    const { stdout } = await execFileAsync("tmux", tmuxSpawnArgs(...args))
+    ensureConfig()
+    const { stdout } = await execAsync(
+      `tmux -L ${TMUX_SOCKET} -f "${CONFIG_PATH}" ${args.join(" ")}`
+    )
     return stdout
   }
 
@@ -48,10 +51,7 @@ export class LocalTmuxExecutor implements TmuxExecutor {
     await execFileAsync("tmux", tmuxSpawnArgs(...args))
   }
 
-  async spawnAttach(sessionName: string, options?: { sessionId?: string }): Promise<void> {
-    if (options?.sessionId) {
-      await installScratchpadBinding(sessionName, options.sessionId)
-    }
+  spawnAttach(sessionName: string): void {
     attachSessionSync(sessionName)
   }
 }
@@ -60,8 +60,9 @@ export const localExecutor = new LocalTmuxExecutor()
 
 export const SESSION_PREFIX = "agentorch_"
 
-// Signal file for command palette request
+// Signal files for UI requests from tmux keybinds
 const COMMAND_PALETTE_SIGNAL = "/tmp/agent-view-cmd-palette"
+const SESSION_LIST_SIGNAL = "/tmp/agent-view-session-list"
 
 // --- Isolated tmux server configuration ---
 // All agent-view sessions run on a dedicated tmux socket with a custom config,
@@ -120,13 +121,6 @@ function ensureConfig(): void {
     }
     if (needsWrite) {
       fs.writeFileSync(CONFIG_PATH, TMUX_CONF, { mode: 0o600 })
-      // Reload config in the running tmux server (if any) so mouse/settings
-      // take effect immediately without needing to restart agent-view.
-      try {
-        execFileSync("tmux", ["-L", TMUX_SOCKET, "source-file", CONFIG_PATH])
-      } catch {
-        // Server not running yet — that's fine, new sessions will pick up the config
-      }
     }
 
     if (!fs.existsSync(BIN_DIR)) {
@@ -220,7 +214,6 @@ export async function installScratchpadBinding(
     tmuxSpawnArgs("bind-key", "-n", "C-t", "run-shell", `tmux display-popup -w 70% -h 70% -E '${SCRATCHPAD_HELPER_PATH} #{pane_id} #{@agent_view_scratchpad_editor} #{@agent_view_scratchpad_path}'`)
   ).catch(() => {})
 }
-
 // Session cache - reduces subprocess spawns
 interface SessionCache {
   data: Map<string, number> // session_name -> activity_timestamp
@@ -376,6 +369,37 @@ export async function killSession(name: string): Promise<void> {
   try {
     await execAsync(tmuxCmd(`kill-session -t "${name}"`))
     sessionCache.data.delete(name)
+  } catch {
+    // Session might not exist
+  }
+}
+
+/**
+ * Rename a tmux session and its window
+ */
+export async function renameSession(oldName: string, newName: string): Promise<void> {
+  try {
+    // Rename the session
+    await execAsync(tmuxCmd(`rename-session -t "${oldName}" "${newName}"`))
+    // Also rename the window to match
+    await execAsync(tmuxCmd(`rename-window -t "${newName}" "${newName}"`))
+    // Update cache
+    const activity = sessionCache.data.get(oldName)
+    if (activity !== undefined) {
+      sessionCache.data.delete(oldName)
+      sessionCache.data.set(newName, activity)
+    }
+  } catch {
+    // Session might not exist
+  }
+}
+
+/**
+ * Rename just the tmux window (for display purposes)
+ */
+export async function renameWindow(sessionName: string, windowTitle: string): Promise<void> {
+  try {
+    await execAsync(tmuxCmd(`rename-window -t "${sessionName}" "${windowTitle}"`))
   } catch {
     // Session might not exist
   }
@@ -537,7 +561,11 @@ export interface ToolStatus {
   isWaiting: boolean
   isBusy: boolean
   hasError: boolean
-  hasExited: boolean
+}
+
+export interface ToolStatusDebug extends ToolStatus {
+  waitingReason?: string
+  errorReason?: string
 }
 
 export function stripAnsi(text: string): string {
@@ -588,40 +616,24 @@ const CLAUDE_EXITED_PATTERNS = [
 const WAITING_PATTERNS = [
   /\? \(y\/n\)/i,
   /\[Y\/n\]/i,
-  /\[y\/N\]/i,
   /Press enter to continue/i,
   /waiting for.*input/i,
   /do you want to/i,
-  /would you like to make the following edits/i,
-  /yes, proceed \(y\)/i,
-  /don't ask again for these files/i,
-  /tell codex what to do differently/i,
-  /(?:^|\n)\s*[›>]\s*1\.\s*Yes,\s*proceed\s*\(y\)/i
 ]
 
-// Codex CLI often shows an explicit approval header plus a confirmation footer.
-// Keep these separate from generic tool rules so we can tighten behavior without
-// affecting other tools.
+// Codex CLI waiting indicators. Keep these stricter than generic patterns to
+// avoid false positives from normal model text (e.g. "do you want to ...").
 const CODEX_WAITING_PATTERNS = [
   /approval required/i,
   /confirm to continue/i,
   /press (enter|return) to (confirm|continue)/i,
   /run command\?/i,
   /apply patch\?/i,
-]
-
-// NOTE: Codex sessions include assistant/user conversation text. Generic prompts
-// like "do you want to" appear frequently in normal chat and cause false
-// positives. Codex waiting detection must be limited to explicit approval UI.
-const CODEX_CONFIRM_PATTERNS = [
-  ...CODEX_WAITING_PATTERNS,
-  // Confirmation tokens that generally appear only in the approval UI.
-  /\? \(y\/n\)/i,
-  /\[Y\/n\]/i,
-  /\[y\/N\]/i,
+  /would you like to make the following edits/i,
   /yes, proceed \(y\)/i,
+  /don't ask again for these files/i,
   /tell codex what to do differently/i,
-  /(?:^|\n)\s*[›>]\s*1\.\s*Yes,\s*proceed\s*\(y\)/i,
+  /(?:^|\n)\s*[›>]\s*1\.\s*Yes,\s*proceed\s*\(y\)/i
 ]
 
 const ERROR_PATTERNS = [
@@ -655,6 +667,11 @@ function hasSpinner(text: string): boolean {
  * @param tool - Optional tool type for tool-specific detection
  */
 export function parseToolStatus(output: string, tool?: string): ToolStatus {
+  const { waitingReason, errorReason, ...status } = parseToolStatusDebug(output, tool)
+  return status
+}
+
+export function parseToolStatusDebug(output: string, tool?: string): ToolStatusDebug {
   const cleaned = stripAnsi(output)
   // Filter out trailing empty lines before slicing - Claude Code TUI often has blank padding
   const allLines = cleaned.split("\n")
@@ -664,12 +681,16 @@ export function parseToolStatus(output: string, tool?: string): ToolStatus {
   }
   const trimmedLines = allLines.slice(0, lastNonEmptyIdx + 1)
   const lastLines = trimmedLines.slice(-30).join("\n")
+  const lastWideLines = trimmedLines.slice(-120).join("\n")
+  const recentLines = trimmedLines.slice(-12).join("\n")
   const lastFewLines = trimmedLines.slice(-10).join("\n")
 
   let isWaiting = false
   let isBusy = false
   let hasError = false
   let hasExited = false
+  let waitingReason: string | undefined
+  let errorReason: string | undefined
 
   if (tool === "claude") {
     // Claude Code specific detection
@@ -681,30 +702,43 @@ export function parseToolStatus(output: string, tool?: string): ToolStatus {
       // Check for busy indicators (actively working)
       isBusy = CLAUDE_BUSY_PATTERNS.some(p => p.test(lastLines)) || hasSpinner(lastFewLines)
 
-      // Check for waiting indicators (needs user input)
-      const hasBaseWaitingCue = CLAUDE_WAITING_PATTERNS.some(p => p.test(lastLines))
-      const hasNumberedYes = /\b1\.\s*Yes\b/i.test(lastLines)
-      const hasPromptContext = /Do you want to proceed\?/i.test(lastLines)
-        || /Esc to cancel.*Tab to amend/i.test(lastLines)
-        || /Enter to select.*to navigate/i.test(lastLines)
-      isWaiting = hasBaseWaitingCue || (hasNumberedYes && hasPromptContext)
+      // Restrict waiting detection to the recent bottom-of-screen content so an
+      // old approval prompt doesn't keep the session stuck in waiting after the
+      // user has already confirmed and Claude resumed working.
+      const matchedClaudeWaiting = CLAUDE_WAITING_PATTERNS.find(p => p.test(recentLines))
+      const waitingInRecentLines = !!matchedClaudeWaiting
+
+      // Fresh busy output should win over stale waiting text that still remains
+      // slightly higher in the pane history.
+      isWaiting = waitingInRecentLines && !isBusy
+      if (matchedClaudeWaiting) waitingReason = matchedClaudeWaiting.source
     }
     // If Claude has exited, both isBusy and isWaiting stay false -> will become idle
   } else if (tool === "codex") {
-    isWaiting = CODEX_CONFIRM_PATTERNS.some(p => p.test(lastLines))
+    // Codex approval blocks can move above the last 30 lines when command output
+    // is noisy. Use a wider context window and codex-specific prompt rules.
+    const matchedCodexWaiting = CODEX_WAITING_PATTERNS.find(p => p.test(lastWideLines))
+    isWaiting = !!matchedCodexWaiting
+    if (matchedCodexWaiting) waitingReason = matchedCodexWaiting.source
   } else {
     // Generic tool detection
-    isWaiting = WAITING_PATTERNS.some(p => p.test(lastLines))
+    const matchedWaiting = WAITING_PATTERNS.find(p => p.test(lastLines))
+    isWaiting = !!matchedWaiting
+    if (matchedWaiting) waitingReason = matchedWaiting.source
   }
 
-  hasError = (tool === "codex" ? CODEX_ERROR_PATTERNS : ERROR_PATTERNS).some(p => p.test(lastLines))
+  const errorPatterns = tool === "codex" ? CODEX_ERROR_PATTERNS : ERROR_PATTERNS
+  const matchedError = errorPatterns.find(p => p.test(lastLines))
+  hasError = !!matchedError
+  if (matchedError) errorReason = matchedError.source
 
   return {
     isActive: false, // Determined by activity timestamp
     isWaiting,
     isBusy,
     hasError,
-    hasExited
+    waitingReason,
+    errorReason
   }
 }
 
@@ -800,6 +834,18 @@ export function wasCommandPaletteRequested(): boolean {
   return false
 }
 
+export function wasSessionListRequested(): boolean {
+  try {
+    if (fs.existsSync(SESSION_LIST_SIGNAL)) {
+      fs.unlinkSync(SESSION_LIST_SIGNAL)
+      return true
+    }
+  } catch {
+    // Ignore errors
+  }
+  return false
+}
+
 /**
  * Attach to a tmux session with Ctrl+Q to detach
  * Keybindings and status bar are configured via the custom tmux.conf,
@@ -880,6 +926,12 @@ export function attachSessionSync(sessionName: string): void {
   } catch {
     // Ignore if doesn't exist
   }
+  try {
+    fs.unlinkSync(SESSION_LIST_SIGNAL)
+  } catch {
+    // Ignore if doesn't exist
+  }
+
   // Exit alternate screen buffer (TUI uses this)
   process.stdout.write("\x1b[?1049l")
   process.stdout.write("\x1b[2J\x1b[H")

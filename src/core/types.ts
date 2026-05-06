@@ -9,7 +9,6 @@ export type SessionStatus =
   | "idle"        // Session exists but agent is not active
   | "stopped"     // Session was explicitly stopped
   | "hibernated"  // Paused to save memory, expected to resume
-  | "offline"     // Remote host unreachable
 
 export type Tool =
   | "claude"      // Claude Code
@@ -38,7 +37,6 @@ export interface Session {
   worktreeBranch: string
   toolData: Record<string, unknown>
   acknowledged: boolean
-  remoteHost: string   // SSH alias; empty string = local
 }
 
 export interface RemoteSession extends Session {
@@ -94,7 +92,6 @@ export interface SessionCreateOptions {
   worktreeRepo?: string
   worktreeBranch?: string
   claudeOptions?: ClaudeOptions
-  remoteHost?: string
 }
 
 export interface WorktreeConfig {
@@ -118,11 +115,10 @@ export interface Recent {
   projectPath: string  // Working directory
   tool: Tool           // Tool type
   groupPath?: string   // Target group (created if missing)
-}
-
-export interface RemoteHost {
-  alias: string    // Must match a Host entry in ~/.ssh/config
-  label?: string   // Optional display name (defaults to alias)
+  // Remote session fields (optional)
+  remoteHost?: string  // SSH host for remote sessions
+  remoteAvPath?: string // av binary path on remote
+  command?: string     // Custom command (when tool === "custom")
 }
 
 export interface Config {
@@ -134,7 +130,10 @@ export interface Config {
   keybinds?: Record<string, string>
   shortcuts?: Shortcut[]
   recents?: Recent[]
-  remoteHosts?: RemoteHost[]
+}
+
+export function isRemoteSession(session: Session): session is RemoteSession {
+  return "remoteName" in session && "remoteHost" in session
 }
 
 export function getToolCommand(tool: Tool, customCmd?: string): string {
