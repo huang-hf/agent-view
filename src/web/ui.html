@@ -6,36 +6,27 @@
   <title>Agent View Mobile</title>
   <style>
     :root {
-      --bg: #081225;
-      --panel: #0f1c35;
-      --panel-soft: #132445;
-      --text: #ecf3ff;
-      --muted: #a8bbdc;
-      --accent: #32d7a2;
-      --warn: #ffcb66;
-      --error: #ff7a8a;
-      --border: #2b3f66;
-      --blue-1: #3b82f6;
-      --blue-2: #60a5fa;
-      --cyan-1: #22d3ee;
-
-      --surface-0: #081225;
-      --surface-1: #0b152a;
-      --surface-2: #0f1c35;
-      --surface-3: #132445;
-
-      --glass-1: rgba(255,255,255,0.04);
-      --glass-2: rgba(255,255,255,0.02);
-      --glass-3: rgba(255,255,255,0.06);
-
-      --radius-s: 10px;
-      --radius-m: 14px;
-      --radius-l: 16px;
-
-      --shadow-1: 0 10px 30px rgba(0,0,0,0.35);
-      --shadow-2: 0 18px 50px rgba(0,0,0,0.42);
-      --ring: 0 0 0 3px rgba(34,211,238,0.22);
-      --ring-accent: 0 0 0 3px rgba(50,215,162,0.25);
+      --bg: #f6efe6;
+      --panel: #fffaf4;
+      --panel-soft: #f3ebdf;
+      --text: #2f241b;
+      --muted: #7e6959;
+      --accent: #bc5a3c;
+      --warn: #c7862a;
+      --error: #bc5d52;
+      --success: #5d8a54;
+      --border: #dfd2c3;
+      --surface-0: #f6efe6;
+      --surface-1: #f9f3eb;
+      --surface-2: #fffaf4;
+      --surface-3: #f1e7da;
+      --radius-s: 12px;
+      --radius-m: 18px;
+      --radius-l: 24px;
+      --shadow-1: 0 10px 30px rgba(70, 43, 27, 0.08);
+      --shadow-2: 0 22px 60px rgba(70, 43, 27, 0.14);
+      --ring: 0 0 0 3px rgba(188,90,60,0.14);
+      --ring-accent: 0 0 0 3px rgba(188,90,60,0.18);
     }
 
     * { box-sizing: border-box; }
@@ -53,9 +44,9 @@
       font-size: 16px;
       color: var(--text);
       background:
-        radial-gradient(900px 500px at 0% -10%, rgba(59,130,246,0.35) 0%, rgba(59,130,246,0) 55%),
-        radial-gradient(1000px 600px at 100% -20%, rgba(34,211,238,0.24) 0%, rgba(34,211,238,0) 58%),
-        linear-gradient(180deg, #0a1730 0%, var(--bg) 45%, #060d1d 100%);
+        radial-gradient(900px 500px at 0% -10%, rgba(188,90,60,0.10) 0%, rgba(188,90,60,0) 55%),
+        radial-gradient(1000px 600px at 100% -20%, rgba(214,180,126,0.14) 0%, rgba(214,180,126,0) 58%),
+        linear-gradient(180deg, #fbf6f0 0%, var(--bg) 50%, #f0e6d8 100%);
       min-height: 100vh;
     }
 
@@ -72,23 +63,14 @@
     }
 
     .card {
-      background-color: rgba(15, 28, 53, 0.55);
       background:
-        linear-gradient(135deg, rgba(96,165,250,0.12), rgba(50,215,162,0.05) 38%, rgba(255,255,255,0.02) 85%),
-        linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015));
+        linear-gradient(180deg, rgba(255,255,255,0.92), rgba(255,248,241,0.96));
       border: 1px solid var(--border);
       border-radius: var(--radius-m);
       padding: 12px;
       box-shadow: var(--shadow-1);
       min-width: 0;
       transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease, transform 160ms ease;
-    }
-
-    @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-      .card {
-        -webkit-backdrop-filter: blur(10px);
-        backdrop-filter: blur(10px);
-      }
     }
 
     .row { display: flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%; }
@@ -100,9 +82,7 @@
 
     button {
       border: 1px solid var(--border);
-      background:
-        linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02)),
-        var(--surface-3);
+      background: var(--surface-3);
       color: var(--text);
       border-radius: var(--radius-s);
       padding: 10px 14px;
@@ -117,10 +97,8 @@
     }
 
     button:hover {
-      border-color: rgba(96,165,250,0.35);
-      background:
-        linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.025)),
-        var(--surface-3);
+      border-color: #cebba6;
+      background: #efe5d7;
     }
 
     button:active {
@@ -130,48 +108,43 @@
     button:focus-visible {
       outline: none;
       box-shadow: var(--ring), var(--shadow-1);
-      border-color: rgba(34,211,238,0.45);
+      border-color: rgba(188,90,60,0.45);
     }
 
     button.primary {
-      border-color: rgba(50,215,162,0.55);
-      background:
-        radial-gradient(700px 220px at 10% 0%, rgba(50,215,162,0.22), rgba(50,215,162,0) 60%),
-        linear-gradient(180deg, rgba(51,181,124,0.92), rgba(30,127,87,0.92));
+      border-color: rgba(188,90,60,0.2);
+      background: linear-gradient(135deg, #bc5a3c, #d37a57);
+      color: #fff7f1;
     }
-    button.primary:hover { border-color: rgba(50,215,162,0.75); }
+    button.primary:hover { border-color: rgba(188,90,60,0.42); }
     button.primary:focus-visible { box-shadow: var(--ring-accent), var(--shadow-1); }
 
     button.warning {
-      border-color: rgba(255,203,102,0.58);
-      background:
-        radial-gradient(700px 220px at 10% 0%, rgba(255,203,102,0.24), rgba(255,203,102,0) 60%),
-        linear-gradient(180deg, rgba(227,177,78,0.96), rgba(180,125,26,0.96));
-      color: #1d1405;
+      border-color: rgba(199,134,42,0.28);
+      background: #f5e5c7;
+      color: #704d18;
       font-weight: 700;
     }
-    button.warning:hover { border-color: rgba(255,203,102,0.8); }
+    button.warning:hover { border-color: rgba(199,134,42,0.48); }
 
     button.danger {
-      border-color: rgba(255,122,138,0.55);
-      background:
-        radial-gradient(700px 220px at 10% 0%, rgba(255,122,138,0.22), rgba(255,122,138,0) 60%),
-        linear-gradient(180deg, rgba(220,101,120,0.96), rgba(183,60,79,0.96));
-      color: #fff5f7;
+      border-color: rgba(188,93,82,0.28);
+      background: #f8ded8;
+      color: #9a4138;
       font-weight: 700;
     }
-    button.danger:hover { border-color: rgba(255,122,138,0.8); }
+    button.danger:hover { border-color: rgba(188,93,82,0.48); }
 
     button:disabled { opacity: 0.5; cursor: not-allowed; }
 
     .switcher-btn {
-      max-width: 70vw;
-      min-width: 0;
-      flex: 1 1 220px;
-      text-align: left;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
+      min-width: 44px;
+      width: 44px;
+      padding: 10px;
+      flex: 0 0 auto;
+      border-radius: 14px;
+      font-size: 18px;
+      line-height: 1;
     }
 
     .meta { color: var(--muted); font-size: 12px; }
@@ -186,8 +159,7 @@
       font-size: 12px;
       color: var(--muted);
       flex-shrink: 0;
-      background: rgba(255,255,255,0.03);
-      box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+      background: #f7efe5;
     }
 
     .dot {
@@ -195,7 +167,7 @@
       height: 8px;
       border-radius: 50%;
       display: inline-block;
-      background: #8ea3c7;
+      background: #b9a38c;
     }
 
     .status-running .dot { background: var(--accent); }
@@ -203,27 +175,27 @@
     .status-error .dot { background: var(--error); }
 
     .status-pill.status-running {
-      border-color: rgba(50,215,162,0.5);
-      background: rgba(50,215,162,0.12);
-      color: #9bf1d2;
+      border-color: rgba(93,138,84,0.22);
+      background: rgba(93,138,84,0.10);
+      color: #486b42;
     }
     .status-pill.status-waiting {
-      border-color: rgba(255,203,102,0.55);
-      background: rgba(255,203,102,0.14);
-      color: #ffe3a7;
+      border-color: rgba(199,134,42,0.24);
+      background: rgba(199,134,42,0.10);
+      color: #8c5f17;
     }
     .status-pill.status-error {
-      border-color: rgba(255,122,138,0.55);
-      background: rgba(255,122,138,0.14);
-      color: #ffd1d8;
+      border-color: rgba(188,93,82,0.24);
+      background: rgba(188,93,82,0.10);
+      color: #95453a;
     }
 
     .transcript {
       background:
-        linear-gradient(180deg, rgba(96,165,250,0.06), rgba(96,165,250,0)),
-        #0a1222;
+        linear-gradient(180deg, rgba(255,255,255,0.72), rgba(247,239,229,0.84)),
+        #fffaf5;
       border: 1px solid var(--border);
-      border-radius: 10px;
+      border-radius: 16px;
       height: 58vh;
       overflow: auto;
       overflow-x: hidden;
@@ -245,70 +217,63 @@
     }
 
     .transcript-line.is-command {
-      color: #b9dcff;
-      background: rgba(59,130,246,0.12);
-      border: 1px solid rgba(59,130,246,0.22);
-      box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+      color: #6e5d50;
+      background: rgba(194,154,100,0.10);
+      border: 1px solid rgba(194,154,100,0.18);
     }
 
     .transcript-line.is-status-good {
-      color: #91e7be;
+      color: #4e7448;
     }
 
     .transcript-line.is-status-bad {
-      color: #ffd1d8;
-      background: rgba(255,122,138,0.12);
-      border: 1px solid rgba(255,122,138,0.22);
-      box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+      color: #95453a;
+      background: rgba(188,93,82,0.10);
+      border: 1px solid rgba(188,93,82,0.18);
     }
 
     .transcript-line.is-status-warn {
-      color: #ffe3a7;
-      background: rgba(255,203,102,0.12);
-      border: 1px solid rgba(255,203,102,0.22);
-      box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+      color: #8c5f17;
+      background: rgba(199,134,42,0.10);
+      border: 1px solid rgba(199,134,42,0.18);
     }
 
     .transcript-line.is-prompt {
-      color: #b9dcff;
+      color: #815a2a;
       font-weight: 700;
-      background: rgba(34,211,238,0.10);
-      border: 1px solid rgba(34,211,238,0.22);
-      box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+      background: rgba(188,90,60,0.08);
+      border: 1px solid rgba(188,90,60,0.16);
     }
 
     .transcript-line.is-muted {
-      color: #7f93b6;
+      color: #9b8679;
     }
 
     .transcript-line.is-divider {
-      color: #5f7398;
+      color: #b59f8c;
     }
 
     .transcript-line.is-note {
-      color: #c4d7f5;
+      color: #8e7564;
       font-style: italic;
     }
 
     .tok-path {
-      color: #c8fbff;
-      background: rgba(34,211,238,0.12);
-      border: 1px solid rgba(34,211,238,0.22);
+      color: #8f553a;
+      background: rgba(188,90,60,0.08);
+      border: 1px solid rgba(188,90,60,0.14);
       border-radius: 6px;
       padding: 0 4px;
-      box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
     }
 
     .input {
       width: 100%;
       max-width: 100%;
       border: 1px solid var(--border);
-      border-radius: 10px;
-      background:
-        linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015)),
-        #0c1628;
+      border-radius: 18px;
+      background: #fffdf9;
       color: var(--text);
-      padding: 10px;
+      padding: 12px 14px;
       font: 16px/1.4 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       min-height: 76px;
       transition: border-color 140ms ease, box-shadow 140ms ease, background 140ms ease;
@@ -316,7 +281,7 @@
 
     .input:focus-visible {
       outline: none;
-      border-color: rgba(34,211,238,0.45);
+      border-color: rgba(188,90,60,0.45);
       box-shadow: var(--ring), var(--shadow-1);
     }
 
@@ -343,7 +308,7 @@
       position: fixed;
       inset: 0;
       display: none;
-      background: rgba(4, 10, 18, 0.72);
+      background: rgba(57, 38, 24, 0.22);
       z-index: 30;
     }
 
@@ -351,30 +316,17 @@
 
     .modal-panel {
       position: absolute;
-      left: 0;
       right: 0;
-      top: 8px;
-      bottom: auto;
-      max-height: calc(100vh - 16px);
+      top: 0;
+      bottom: 0;
+      width: min(420px, 100vw);
+      max-height: 100vh;
       overflow: auto;
-      background:
-        linear-gradient(180deg, rgba(96,165,250,0.1), rgba(96,165,250,0) 18%),
-        #0b1525;
+      background: linear-gradient(180deg, rgba(255,252,246,0.98), rgba(246,238,228,0.98));
       border: 1px solid var(--border);
-      border-radius: 16px;
-      padding: 12px;
+      border-radius: 24px 0 0 24px;
+      padding: 16px;
       box-shadow: var(--shadow-2);
-    }
-
-    @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-      .modal {
-        -webkit-backdrop-filter: blur(8px);
-        backdrop-filter: blur(8px);
-      }
-      .modal-panel {
-        -webkit-backdrop-filter: blur(10px);
-        backdrop-filter: blur(10px);
-      }
     }
 
     .group {
@@ -382,16 +334,16 @@
       border-radius: 10px;
       margin-top: 8px;
       overflow: hidden;
-      background: #0d192a;
+      background: #fff8f1;
     }
 
     .group-head {
       width: 100%;
       text-align: left;
       border: none;
-      border-bottom: 1px solid rgba(255,255,255,0.04);
+      border-bottom: 1px solid rgba(223,210,195,0.8);
       border-radius: 0;
-      background: linear-gradient(135deg, rgba(59,130,246,0.28), rgba(34,211,238,0.14));
+      background: linear-gradient(135deg, rgba(244,232,214,0.95), rgba(255,248,239,0.92));
       padding: 12px;
       min-height: 48px;
       font-size: 15px;
@@ -415,11 +367,11 @@
       transition: background 140ms ease, filter 140ms ease;
     }
 
-    .session-row:hover { background: rgba(255,255,255,0.02); }
+    .session-row:hover { background: rgba(194,154,100,0.06); }
 
     .session-row.active {
-      background: linear-gradient(135deg, rgba(59,130,246,0.33), rgba(34,211,238,0.12));
-      color: #eaf4ff;
+      background: linear-gradient(135deg, rgba(188,90,60,0.10), rgba(194,154,100,0.06));
+      color: var(--text);
     }
 
     .inbox-item {
@@ -430,29 +382,127 @@
       font-size: 15px;
       border: 1px solid var(--border);
       border-radius: 10px;
-      background: linear-gradient(135deg, rgba(255,203,102,0.18), rgba(255,122,138,0.08) 55%, rgba(255,255,255,0.02));
+      background: linear-gradient(135deg, rgba(245,229,199,0.92), rgba(255,249,240,0.94));
       margin-top: 8px;
       transition: border-color 140ms ease, filter 140ms ease, background 140ms ease;
     }
-    .inbox-item:hover { filter: brightness(1.05); border-color: rgba(255,203,102,0.35); }
+    .inbox-item:hover { filter: brightness(1.02); border-color: rgba(199,134,42,0.32); }
 
     .inbox-clear {
       flex: 0 0 auto;
       min-height: 32px;
       padding: 6px 10px;
       font-size: 12px;
-      background: rgba(255,255,255,0.04);
+      background: #f6ecde;
     }
 
     .topbar {
-      flex-wrap: wrap;
-      align-items: flex-start;
+      padding: 10px 12px;
+      align-items: center;
+      gap: 10px;
     }
 
-    .topbar-actions {
-      margin-left: auto;
+    .topbar-copy {
+      display: grid;
+      gap: 2px;
+      flex: 1 1 auto;
+    }
+
+    .topbar-kicker,
+    .section-label {
+      color: var(--muted);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .topbar-title {
+      font-size: 16px;
+      font-weight: 700;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .topbar-meta {
+      flex: 0 0 auto;
+      text-align: right;
+    }
+
+    .workspace {
+      display: grid;
+      gap: 12px;
+      padding: 14px;
+    }
+
+    .workspace-summary {
+      display: grid;
+      gap: 6px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid rgba(223,210,195,0.8);
+    }
+
+    .workspace-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
       flex-wrap: wrap;
-      justify-content: flex-end;
+    }
+
+    .workspace-title {
+      display: grid;
+      gap: 4px;
+      min-width: 0;
+      flex: 1 1 240px;
+    }
+
+    .workspace-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .workspace-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .composer {
+      display: grid;
+      gap: 8px;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.92), rgba(250,244,236,0.98));
+    }
+
+    .composer-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .drawer-meta {
+      display: grid;
+      gap: 4px;
+      margin: 10px 0 12px;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      background: linear-gradient(180deg, rgba(255,252,246,0.98), rgba(244,236,225,0.95));
+    }
+
+    .drawer-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 10px;
     }
 
     #session-title {
@@ -496,21 +546,6 @@
         padding: 10px;
       }
 
-      .topbar-actions {
-        width: 100%;
-        margin-left: 0;
-        justify-content: stretch;
-      }
-
-      .topbar-actions button {
-        flex: 1 1 0;
-      }
-
-      .switcher-btn {
-        max-width: 100%;
-        flex-basis: 100%;
-      }
-
       .between {
         flex-wrap: wrap;
         row-gap: 8px;
@@ -520,47 +555,68 @@
         max-width: 100%;
       }
 
-      .session-actions button {
+      .workspace-actions button {
         flex: 1 1 100%;
       }
 
       .modal-panel {
-        top: env(safe-area-inset-top, 0px);
-        max-height: calc(100vh - env(safe-area-inset-top, 0px));
+        width: 100vw;
+        border-radius: 22px 22px 0 0;
+        left: 0;
+        right: 0;
+        top: auto;
+        bottom: 0;
+        max-height: min(88vh, 100vh);
+      }
+
+      .workspace-actions {
+        grid-template-columns: 1fr;
       }
     }
   </style>
 </head>
 <body>
   <main class="app">
-    <section class="card row between topbar">
-      <div>
-        <h1>Agent View Mobile</h1>
-        <div class="hint">Focus-first view with group switcher</div>
+    <section class="card row topbar">
+      <button id="btn-switcher" class="switcher-btn" title="Open sessions">☰</button>
+      <div class="topbar-copy">
+        <div class="topbar-kicker">Agent View</div>
+        <div class="topbar-title">Current session</div>
       </div>
-      <div class="row topbar-actions">
-        <button id="btn-switcher" class="switcher-btn">Session</button>
-        <button id="btn-notify">Enable Notifications</button>
-        <button id="btn-test-notify">Test Notification</button>
+      <div class="topbar-meta">
+        <div class="section-label">Session activity</div>
+        <div class="meta" id="header-pending">0 waiting</div>
       </div>
     </section>
 
-    <section class="card">
-      <div class="row between session-head">
-        <strong id="session-title">No session selected</strong>
-        <span class="status-pill" id="session-status-pill"><span class="dot"></span><span id="session-status-text">idle</span></span>
+    <section class="card workspace">
+      <div class="workspace-summary">
+        <div class="workspace-header">
+          <div class="workspace-title">
+            <div class="section-label">Session workspace</div>
+            <strong id="session-title">No session selected</strong>
+          </div>
+          <span class="status-pill" id="session-status-pill"><span class="dot"></span><span id="session-status-text">idle</span></span>
+        </div>
+        <div class="workspace-meta">
+          <div class="meta" id="session-meta">-</div>
+          <div class="hint">Scroll to top to load older messages.</div>
+        </div>
       </div>
-      <div class="meta" id="session-meta">-</div>
-      <div class="hint" style="margin:8px 0;">Scroll to top to load older messages.</div>
+
       <div id="transcript" class="transcript"></div>
-      <div class="row session-actions" style="margin-top: 10px;">
+
+      <div class="workspace-actions">
         <button id="btn-confirm" class="warning" title="Send Enter for waiting prompt">Quick Confirm</button>
-        <button id="btn-interrupt" class="danger" title="Send Esc Esc">Interrupt (Esc Esc)</button>
+        <button id="btn-interrupt" class="danger" title="Send Esc Esc">Interrupt</button>
       </div>
-      <textarea id="message" class="input" placeholder="Send instructions to this session..."></textarea>
-      <div class="row between" style="margin-top: 8px;">
-        <span class="hint">Enter to send · Shift+Enter for new line</span>
-        <button id="btn-send" class="primary">Send</button>
+
+      <div class="composer">
+        <textarea id="message" class="input" placeholder="Send instructions to this session..."></textarea>
+        <div class="composer-footer">
+          <span class="hint">Enter to send · Shift+Enter for new line</span>
+          <button id="btn-send" class="primary">Send</button>
+        </div>
       </div>
     </section>
   </main>
@@ -570,11 +626,19 @@
       <div class="row between">
         <div class="row">
           <button id="btn-switcher-back" style="display:none;">Back</button>
-          <strong id="switcher-title">Groups & Sessions</strong>
+          <strong id="switcher-title">Open sessions</strong>
         </div>
         <button id="btn-close-switcher">Close</button>
       </div>
-      <div class="meta" id="switcher-summary">0 groups</div>
+      <div class="drawer-meta">
+        <div class="section-label">Open sessions</div>
+        <div class="meta" id="switcher-summary">0 groups</div>
+        <div class="hint">Notification settings and waiting sessions now live here instead of the top bar.</div>
+      </div>
+      <div class="drawer-actions">
+        <button id="btn-notify">Notifications</button>
+        <button id="btn-test-notify">Notification settings</button>
+      </div>
       <div id="switcher-inbox" class="stack"></div>
       <div id="switcher-groups"></div>
     </div>
@@ -608,6 +672,7 @@
       switcherSummary: document.getElementById("switcher-summary"),
       switcherBack: document.getElementById("btn-switcher-back"),
       switcherTitle: document.getElementById("switcher-title"),
+      headerPending: document.getElementById("header-pending"),
 
       transcript: document.getElementById("transcript"),
       sessionTitle: document.getElementById("session-title"),
@@ -839,12 +904,12 @@
 
     function updateNotifyButtonText() {
       if (!window.Notification) {
-        el.btnNotify.textContent = "Notification Unsupported"
+        el.btnNotify.textContent = "Notifications unavailable"
         return
       }
       el.btnNotify.textContent = Notification.permission === "granted"
-        ? "Notifications Enabled"
-        : "Enable Notifications"
+        ? "Notifications on"
+        : "Notifications"
     }
 
     async function notifySystem(title, body, options = {}) {
@@ -909,7 +974,8 @@
 
     function updateTopSwitcherLabel() {
       const pending = state.inbox.length
-      el.btnSwitcher.textContent = pending > 0 ? `Session (${pending})` : "Session"
+      el.btnSwitcher.title = pending > 0 ? `Open sessions (${pending} waiting)` : "Open sessions"
+      el.headerPending.textContent = pending > 0 ? `${pending} waiting` : "0 waiting"
     }
 
     function renderSwitcher() {
@@ -919,7 +985,7 @@
       const currentGroup = inGroup ? groups.find(g => g.key === inGroup) : null
 
       el.switcherBack.style.display = inGroup ? "inline-block" : "none"
-      el.switcherTitle.textContent = currentGroup ? currentGroup.name : "Groups & Sessions"
+      el.switcherTitle.textContent = currentGroup ? currentGroup.name : "Open sessions"
       el.switcherSummary.textContent = currentGroup
         ? `${currentGroup.sessions.length} sessions`
         : `${totalGroups} groups · ${state.sessions.length} sessions`
@@ -929,7 +995,7 @@
           el.switcherInbox.innerHTML = ""
         } else {
           el.switcherInbox.innerHTML = `
-            <div class="meta" style="margin-top:8px;">Inbox (${state.inbox.length})</div>
+            <div class="section-label" style="margin-top:8px;">Waiting inbox (${state.inbox.length})</div>
             ${state.inbox.map(i => `
               <div class="inbox-item">
                 <div class="row between">
@@ -942,6 +1008,7 @@
                   </div>
                 </div>
                 <div class="meta">${esc(i.tool)} · ${esc(i.groupPath)}</div>
+                <div class="hint" style="margin-top:6px;">Needs attention · tap to jump into the session.</div>
               </div>
             `).join("")}
           `
