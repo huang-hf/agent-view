@@ -950,6 +950,9 @@ export class SessionManager {
       throw new Error(`Session not found or not running: ${sessionId}`)
     }
 
+    storage.updateSessionField(sessionId, "last_accessed", Date.now())
+    storage.touch()
+
     log("attach() sessionId:", sessionId, "tmuxSession:", session.tmuxSession, "remoteHost:", session.remoteHost)
     const executor = this.getExecutor(session.remoteHost)
     await executor.spawnAttach(session.tmuxSession, { sessionId })

@@ -11,10 +11,15 @@ export interface GroupedItem {
   groupPath: string
   isLast: boolean
   groupIndex?: number  // 1-9 for hotkey jumps
+  isVirtual?: boolean
+  virtualType?: "current"
+  isCurrent?: boolean
 }
 
 export const DEFAULT_GROUP_PATH = "my-sessions"
 export const DEFAULT_GROUP_NAME = "My Sessions"
+export const CURRENT_GROUP_PATH = "__current__"
+export const CURRENT_GROUP_NAME = "Current"
 
 export function ensureDefaultGroup(groups: Group[]): Group[] {
   const hasDefault = groups.some(g => g.path === DEFAULT_GROUP_PATH)
@@ -118,6 +123,49 @@ export function flattenGroupTree(sessions: Session[], groups: Group[]): GroupedI
   }
 
   return result
+}
+
+export function prependCurrentGroup(
+  groupedItems: GroupedItem[],
+  currentSessions: Session[],
+  expanded = true
+): GroupedItem[] {
+  if (currentSessions.length === 0) return groupedItems
+
+  const currentGroup: Group = {
+    path: CURRENT_GROUP_PATH,
+    name: CURRENT_GROUP_NAME,
+    expanded,
+    order: -1,
+    defaultPath: ""
+  }
+
+  const currentItems: GroupedItem[] = [
+    {
+      type: "group",
+      group: currentGroup,
+      groupPath: CURRENT_GROUP_PATH,
+      isLast: false,
+      isVirtual: true,
+      virtualType: "current"
+    }
+  ]
+
+  if (expanded) {
+    for (let i = 0; i < currentSessions.length; i++) {
+      currentItems.push({
+        type: "session",
+        session: currentSessions[i],
+        groupPath: CURRENT_GROUP_PATH,
+        isLast: i === currentSessions.length - 1,
+        isVirtual: true,
+        virtualType: "current",
+        isCurrent: true
+      })
+    }
+  }
+
+  return [...currentItems, ...groupedItems]
 }
 
 export function getGroupSessionCount(sessions: Session[], groupPath: string): number {

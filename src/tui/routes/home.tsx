@@ -11,7 +11,8 @@ import { useSync } from "@tui/context/sync"
 import { useDialog } from "@tui/ui/dialog"
 import { DialogSelect } from "@tui/ui/dialog-select"
 import { useToast } from "@tui/ui/toast"
-import { DialogNew, SavedFormState } from "@tui/component/dialog-new"
+import { DialogNew } from "@tui/component/dialog-new"
+import type { SavedFormState } from "@tui/component/dialog-new"
 import { DialogRename } from "@tui/component/dialog-rename"
 import { DialogGroup } from "@tui/component/dialog-group"
 import { DialogMove } from "@tui/component/dialog-move"
@@ -31,10 +32,11 @@ import { useCommandDialog } from "@tui/component/dialog-command"
 import type { Session, Group } from "@/core/types"
 import { formatRelativeTime, truncatePath } from "@tui/util/locale"
 import { STATUS_ICONS } from "@tui/util/status"
-import { sortSessionsByCreatedAt } from "@tui/util/session"
+import { getCurrentSessions } from "@tui/util/session"
 import { createListNavigation } from "@tui/util/navigation"
 import {
   flattenGroupTree,
+  prependCurrentGroup,
   ensureDefaultGroup,
   getGroupSessionCount,
   getGroupStatusSummary,
@@ -105,6 +107,7 @@ export function Home() {
   const [inputMode, setInputMode] = createSignal<"keyboard" | "mouse">("keyboard")
   const [previewContent, setPreviewContent] = createSignal<string>("")
   const [previewLoading, setPreviewLoading] = createSignal(false)
+  const [currentExpanded, setCurrentExpanded] = createSignal(true)
   let scrollRef: ScrollBoxRenderable | undefined
   let previewScrollRef: ScrollBoxRenderable | undefined
   let previewDebounceTimer: ReturnType<typeof setTimeout> | undefined
@@ -155,10 +158,12 @@ export function Home() {
   })
 
   const allSessions = createMemo(() => sync.session.list())
+  const currentSessions = createMemo(() => getCurrentSessions(allSessions()))
 
   const groupedItems = createMemo(() => {
     const groups = ensureDefaultGroup(sync.group.list())
-    return flattenGroupTree(allSessions(), groups)
+    const realGroupedItems = flattenGroupTree(allSessions(), groups)
+    return prependCurrentGroup(realGroupedItems, currentSessions(), currentExpanded())
   })
 
   createEffect(() => {
@@ -177,7 +182,7 @@ export function Home() {
 
   const selectedGroup = createMemo(() => {
     const item = selectedItem()
-    return item?.type === "group" ? item.group : undefined
+    return item?.type === "group" && !item.isVirtual ? item.group : undefined
   })
 
   const move = createListNavigation(
@@ -478,7 +483,9 @@ export function Home() {
     // Right arrow: expand group (or attach to session)
     if (evt.name === "right" || evt.name === "l") {
       const item = selectedItem()
-      if (item?.type === "group" && item.group && !item.group.expanded) {
+      if (item?.type === "group" && item.virtualType === "current" && !currentExpanded()) {
+        setCurrentExpanded(true)
+      } else if (item?.type === "group" && item.group && !item.group.expanded) {
         sync.group.toggle(item.group.path)
       } else if (item?.type === "session" && item.session) {
         handleAttach(item.session)
@@ -488,12 +495,16 @@ export function Home() {
     // Left arrow: collapse group
     if (evt.name === "left" || evt.name === "h") {
       const item = selectedItem()
-      if (item?.type === "group" && item.group && item.group.expanded) {
+      if (item?.type === "group" && item.virtualType === "current" && currentExpanded()) {
+        setCurrentExpanded(false)
+      } else if (item?.type === "group" && item.group && item.group.expanded) {
         sync.group.toggle(item.group.path)
+      } else if (item?.type === "session" && item.isCurrent) {
+        setCurrentExpanded(false)
       } else if (item?.type === "session") {
         // When on a session, collapse its parent group
         const groupItem = groupedItems().find(
-          i => i.type === "group" && i.groupPath === item.groupPath
+          i => i.type === "group" && i.groupPath === item.groupPath && !i.isVirtual
         )
         if (groupItem?.group?.expanded) {
           sync.group.toggle(groupItem.group.path)
@@ -506,6 +517,8 @@ export function Home() {
       const item = selectedItem()
       if (item?.type === "session" && item.session) {
         handleAttach(item.session)
+      } else if (item?.type === "group" && item.virtualType === "current") {
+        setCurrentExpanded(!currentExpanded())
       } else if (item?.type === "group" && item.group) {
         sync.group.toggle(item.group.path)
       }
@@ -516,6 +529,8 @@ export function Home() {
       const item = selectedItem()
       if (item?.type === "session" && item.session) {
         handleDelete(item.session)
+      } else if (item?.type === "group" && item.virtualType === "current") {
+        toast.show({ message: "Current is a virtual group", variant: "info", duration: 1500 })
       } else if (item?.type === "group" && item.group) {
         handleDeleteGroup(item.group)
       }
@@ -548,6 +563,8 @@ export function Home() {
       const item = selectedItem()
       if (item?.type === "session" && item.session) {
         dialog.push(() => <DialogRename session={item.session!} />)
+      } else if (item?.type === "group" && item.virtualType === "current") {
+        toast.show({ message: "Current is a virtual group", variant: "info", duration: 1500 })
       } else if (item?.type === "group" && item.group) {
         dialog.push(() => <DialogGroup mode="rename" group={item.group!} />)
       }
@@ -691,9 +708,19 @@ export function Home() {
     return lines
   })
 
-  function GroupHeader(props: { group: Group; index: number }) {
+  function GroupHeader(props: { item: GroupedItem; index: number }) {
     const isSelected = createMemo(() => props.index === selectedIndex())
-    const statusSummary = createMemo(() => getGroupStatusSummary(allSessions(), props.group.path))
+    const group = createMemo(() => props.item.group!)
+    const statusSummary = createMemo(() => {
+      if (props.item.virtualType === "current") {
+        const sessions = currentSessions()
+        return {
+          running: sessions.filter(s => s.status === "running").length,
+          waiting: sessions.filter(s => s.status === "waiting").length
+        }
+      }
+      return getGroupStatusSummary(allSessions(), group().path)
+    })
 
     return (
       <box
@@ -706,7 +733,11 @@ export function Home() {
         onMouseUp={() => {
           setInputMode("mouse")
           setSelectedIndex(props.index)
-          sync.group.toggle(props.group.path)
+          if (props.item.virtualType === "current") {
+            setCurrentExpanded(!currentExpanded())
+          } else {
+            sync.group.toggle(group().path)
+          }
         }}
         onMouseOver={() => {
           if (inputMode() === "mouse") setSelectedIndex(props.index)
@@ -714,7 +745,7 @@ export function Home() {
       >
         {/* Expand/collapse arrow */}
         <text fg={isSelected() ? theme.selectedListItemText : theme.accent}>
-          {props.group.expanded ? "\u25BC" : "\u25B6"}
+          {group().expanded ? "\u25BC" : "\u25B6"}
         </text>
         <text> </text>
 
@@ -723,7 +754,7 @@ export function Home() {
           fg={isSelected() ? theme.selectedListItemText : theme.text}
           attributes={TextAttributes.BOLD}
         >
-          {props.group.name}
+          {group().name}
         </text>
 
         {/* Spacer */}
@@ -1012,7 +1043,7 @@ export function Home() {
                       />
                     }
                   >
-                    <GroupHeader group={item.group!} index={index()} />
+                    <GroupHeader item={item} index={index()} />
                   </Show>
                 )}
               </For>

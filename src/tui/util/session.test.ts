@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test"
-import { sortSessionsByCreatedAt } from "./session"
+import { getCurrentSessions, sortSessionsByCreatedAt } from "./session"
 import type { Session } from "@/core/types"
 
 function createMockSession(overrides: Partial<Session> = {}): Session {
@@ -126,5 +126,67 @@ describe("sortSessionsByCreatedAt", () => {
     // Both should be present, order is implementation-defined for equal keys
     expect(result).toHaveLength(2)
     expect(result.map(s => s.id).sort()).toEqual(["1", "2"])
+  })
+})
+
+describe("getCurrentSessions", () => {
+  test("returns active sessions sorted by last accessed newest first", () => {
+    const oldest = createMockSession({
+      id: "oldest",
+      status: "idle",
+      lastAccessed: new Date("2024-01-01T10:00:00Z"),
+    })
+    const newest = createMockSession({
+      id: "newest",
+      status: "running",
+      lastAccessed: new Date("2024-01-03T10:00:00Z"),
+    })
+    const middle = createMockSession({
+      id: "middle",
+      status: "waiting",
+      lastAccessed: new Date("2024-01-02T10:00:00Z"),
+    })
+
+    const result = getCurrentSessions([oldest, newest, middle])
+
+    expect(result.map(s => s.id)).toEqual(["newest", "middle", "oldest"])
+  })
+
+  test("excludes stopped and hibernated sessions", () => {
+    const sessions = [
+      createMockSession({ id: "running", status: "running" }),
+      createMockSession({ id: "waiting", status: "waiting" }),
+      createMockSession({ id: "idle", status: "idle" }),
+      createMockSession({ id: "stopped", status: "stopped" }),
+      createMockSession({ id: "hibernated", status: "hibernated" }),
+    ]
+
+    const result = getCurrentSessions(sessions)
+
+    expect(result.map(s => s.id).sort()).toEqual(["idle", "running", "waiting"])
+  })
+
+  test("limits results to ten sessions by default", () => {
+    const sessions = Array.from({ length: 12 }, (_, i) => createMockSession({
+      id: `session-${i}`,
+      lastAccessed: new Date(Date.UTC(2024, 0, 1, 10, i)),
+    }))
+
+    const result = getCurrentSessions(sessions)
+
+    expect(result).toHaveLength(10)
+    expect(result[0]!.id).toBe("session-11")
+    expect(result[9]!.id).toBe("session-2")
+  })
+
+  test("accepts a custom limit", () => {
+    const sessions = Array.from({ length: 4 }, (_, i) => createMockSession({
+      id: `session-${i}`,
+      lastAccessed: new Date(Date.UTC(2024, 0, 1, 10, i)),
+    }))
+
+    const result = getCurrentSessions(sessions, { limit: 2 })
+
+    expect(result.map(s => s.id)).toEqual(["session-3", "session-2"])
   })
 })

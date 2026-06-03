@@ -1,10 +1,13 @@
 import { describe, test, expect } from "bun:test"
 import {
   flattenGroupTree,
+  prependCurrentGroup,
   ensureDefaultGroup,
   getGroupSessionCount,
   getGroupStatusSummary,
   generateGroupPath,
+  CURRENT_GROUP_PATH,
+  CURRENT_GROUP_NAME,
   DEFAULT_GROUP_PATH,
   DEFAULT_GROUP_NAME
 } from "./groups"
@@ -123,6 +126,63 @@ describe("flattenGroupTree", () => {
     expect(result[0]!.groupIndex).toBe(1)
     expect(result[8]!.groupIndex).toBe(9)
     expect(result[9]!.groupIndex).toBeUndefined()
+  })
+})
+
+describe("prependCurrentGroup", () => {
+  test("returns original grouped items when current sessions are empty", () => {
+    const groups = [createMockGroup({ path: "group-1" })]
+    const groupedItems = flattenGroupTree([], groups)
+
+    const result = prependCurrentGroup(groupedItems, [])
+
+    expect(result).toEqual(groupedItems)
+  })
+
+  test("adds virtual Current group before real groups", () => {
+    const groups = [createMockGroup({ path: "group-1", name: "Group 1" })]
+    const currentSession = createMockSession({ id: "current-1", groupPath: "group-1" })
+    const groupedItems = flattenGroupTree([currentSession], groups)
+
+    const result = prependCurrentGroup(groupedItems, [currentSession])
+
+    expect(result[0]!.type).toBe("group")
+    expect(result[0]!.groupPath).toBe(CURRENT_GROUP_PATH)
+    expect(result[0]!.group?.name).toBe(CURRENT_GROUP_NAME)
+    expect(result[0]!.isVirtual).toBe(true)
+    expect(result[0]!.virtualType).toBe("current")
+    expect(result[1]!.type).toBe("session")
+    expect(result[1]!.session?.id).toBe("current-1")
+    expect(result[1]!.isCurrent).toBe(true)
+  })
+
+  test("does not consume numeric group indexes for real groups", () => {
+    const groups = [
+      createMockGroup({ path: "group-1", order: 0 }),
+      createMockGroup({ path: "group-2", order: 1 })
+    ]
+    const currentSession = createMockSession({ id: "current-1", groupPath: "group-1" })
+    const groupedItems = flattenGroupTree([currentSession], groups)
+
+    const result = prependCurrentGroup(groupedItems, [currentSession])
+    const realGroups = result.filter(item => item.type === "group" && !item.isVirtual)
+
+    expect(result[0]!.groupIndex).toBeUndefined()
+    expect(realGroups[0]!.groupIndex).toBe(1)
+    expect(realGroups[1]!.groupIndex).toBe(2)
+  })
+
+  test("renders only Current header when collapsed", () => {
+    const groups = [createMockGroup({ path: "group-1" })]
+    const currentSession = createMockSession({ id: "current-1", groupPath: "group-1" })
+    const groupedItems = flattenGroupTree([currentSession], groups)
+
+    const result = prependCurrentGroup(groupedItems, [currentSession], false)
+
+    expect(result[0]!.type).toBe("group")
+    expect(result[0]!.groupPath).toBe(CURRENT_GROUP_PATH)
+    expect(result[1]!.type).toBe("group")
+    expect(result.some(item => item.isCurrent)).toBe(false)
   })
 })
 
