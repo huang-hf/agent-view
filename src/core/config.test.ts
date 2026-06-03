@@ -162,6 +162,12 @@ describe("config", () => {
       expect(config.worktree).toBeUndefined()
       expect(config.defaultGroup).toBeUndefined()
     })
+
+    test("AppConfig allows current session ids", () => {
+      const config: AppConfig = { currentSessionIds: ["s1", "s2"] }
+
+      expect(config.currentSessionIds).toEqual(["s1", "s2"])
+    })
   })
 
   describe("tool types", () => {

@@ -32,6 +32,7 @@ export interface AppConfig {
   autoHibernatePrompted?: boolean // true = user has seen the prompt
   remoteHosts?: RemoteHost[]
   lastRemoteSession?: LastRemoteSession
+  currentSessionIds?: string[]
   copyClaudeDir?: boolean  // true = copy .claude dir to worktree (default true)
   notify?: NotifyConfig
 }

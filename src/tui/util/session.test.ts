@@ -1,5 +1,11 @@
 import { describe, test, expect } from "bun:test"
-import { getCurrentSessions, sortSessionsByCreatedAt } from "./session"
+import {
+  addCurrentSessionId,
+  getCurrentSessions,
+  normalizeCurrentSessionIds,
+  removeCurrentSessionId,
+  sortSessionsByCreatedAt
+} from "./session"
 import type { Session } from "@/core/types"
 
 function createMockSession(overrides: Partial<Session> = {}): Session {
@@ -130,6 +136,21 @@ describe("sortSessionsByCreatedAt", () => {
 })
 
 describe("getCurrentSessions", () => {
+  test("uses stored ids order instead of lastAccessed order", () => {
+    const olderAccess = createMockSession({
+      id: "first",
+      lastAccessed: new Date("2024-01-01T10:00:00Z"),
+    })
+    const newerAccess = createMockSession({
+      id: "second",
+      lastAccessed: new Date("2024-01-03T10:00:00Z"),
+    })
+
+    const result = getCurrentSessions([newerAccess, olderAccess], { ids: ["first", "second"] })
+
+    expect(result.map(s => s.id)).toEqual(["first", "second"])
+  })
+
   test("returns active sessions sorted by last accessed newest first", () => {
     const oldest = createMockSession({
       id: "oldest",
@@ -188,5 +209,38 @@ describe("getCurrentSessions", () => {
     const result = getCurrentSessions(sessions, { limit: 2 })
 
     expect(result.map(s => s.id)).toEqual(["session-3", "session-2"])
+  })
+})
+
+describe("current session id helpers", () => {
+  test("addCurrentSessionId prepends new ids and preserves existing positions", () => {
+    expect(addCurrentSessionId(["a", "b"], "c")).toEqual(["c", "a", "b"])
+    expect(addCurrentSessionId(["a", "b"], "b")).toEqual(["a", "b"])
+  })
+
+  test("addCurrentSessionId trims from the tail", () => {
+    const ids = Array.from({ length: 10 }, (_, i) => `s${i}`)
+
+    expect(addCurrentSessionId(ids, "new")).toEqual(["new", "s0", "s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8"])
+  })
+
+  test("removeCurrentSessionId removes only the matching id", () => {
+    expect(removeCurrentSessionId(["a", "b", "c"], "b")).toEqual(["a", "c"])
+  })
+
+  test("normalizeCurrentSessionIds removes missing and inactive sessions", () => {
+    const sessions = [
+      createMockSession({ id: "idle", status: "idle" }),
+      createMockSession({ id: "running", status: "running" }),
+      createMockSession({ id: "stopped", status: "stopped" }),
+      createMockSession({ id: "hibernated", status: "hibernated" }),
+    ]
+
+    const result = normalizeCurrentSessionIds(
+      ["missing", "stopped", "idle", "hibernated", "running"],
+      sessions
+    )
+
+    expect(result).toEqual(["idle", "running"])
   })
 })

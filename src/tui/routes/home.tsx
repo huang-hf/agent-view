@@ -20,7 +20,7 @@ import { DialogShortcuts } from "@tui/component/dialog-shortcuts"
 import { DialogRecents } from "@tui/component/dialog-recents"
 import { DialogSettings } from "@tui/component/dialog-settings"
 import { DialogHelp } from "@tui/component/dialog-help"
-import { getShortcuts, getConfig } from "@/core/config"
+import { getShortcuts, getConfig, saveConfig } from "@/core/config"
 import { getSessionManager } from "@/core/session"
 import { getSshManager } from "@/core/ssh"
 import { executeShortcut, getShortcutGroupPath } from "@/core/shortcut"
@@ -32,7 +32,12 @@ import { useCommandDialog } from "@tui/component/dialog-command"
 import type { Session, Group } from "@/core/types"
 import { formatRelativeTime, truncatePath } from "@tui/util/locale"
 import { STATUS_ICONS } from "@tui/util/status"
-import { getCurrentSessions } from "@tui/util/session"
+import {
+  addCurrentSessionId,
+  getCurrentSessions,
+  normalizeCurrentSessionIds,
+  removeCurrentSessionId
+} from "@tui/util/session"
 import { createListNavigation } from "@tui/util/navigation"
 import {
   flattenGroupTree,
@@ -108,6 +113,7 @@ export function Home() {
   const [previewContent, setPreviewContent] = createSignal<string>("")
   const [previewLoading, setPreviewLoading] = createSignal(false)
   const [currentExpanded, setCurrentExpanded] = createSignal(true)
+  const [currentSessionIds, setCurrentSessionIds] = createSignal<string[]>(getConfig().currentSessionIds ?? [])
   let scrollRef: ScrollBoxRenderable | undefined
   let previewScrollRef: ScrollBoxRenderable | undefined
   let previewDebounceTimer: ReturnType<typeof setTimeout> | undefined
@@ -158,13 +164,59 @@ export function Home() {
   })
 
   const allSessions = createMemo(() => sync.session.list())
-  const currentSessions = createMemo(() => getCurrentSessions(allSessions()))
+  const currentSessions = createMemo(() => getCurrentSessions(allSessions(), { ids: currentSessionIds() }))
 
   const groupedItems = createMemo(() => {
     const groups = ensureDefaultGroup(sync.group.list())
     const realGroupedItems = flattenGroupTree(allSessions(), groups)
     return prependCurrentGroup(realGroupedItems, currentSessions(), currentExpanded())
   })
+
+  function sameIds(a: string[], b: string[]): boolean {
+    return a.length === b.length && a.every((id, idx) => id === b[idx])
+  }
+
+  async function persistCurrentSessionIds(ids: string[]) {
+    setCurrentSessionIds(ids)
+    try {
+      await saveConfig({ ...getConfig(), currentSessionIds: ids })
+    } catch (err) {
+      toast.error(err as Error)
+    }
+  }
+
+  createEffect(() => {
+    const sessions = allSessions()
+    const configIds = getConfig().currentSessionIds
+    const existingIds = currentSessionIds()
+    const nextIds = configIds === undefined && existingIds.length === 0
+      ? getCurrentSessions(sessions).map(s => s.id)
+      : normalizeCurrentSessionIds(existingIds, sessions)
+
+    if (!sameIds(existingIds, nextIds)) {
+      persistCurrentSessionIds(nextIds)
+    }
+  })
+
+  function rememberCurrentSession(session: Session, item: GroupedItem | undefined) {
+    if (item?.isCurrent) return
+    const nextIds = addCurrentSessionId(currentSessionIds(), session.id)
+    if (!sameIds(currentSessionIds(), nextIds)) {
+      persistCurrentSessionIds(nextIds)
+    }
+  }
+
+  function removeSelectedFromCurrent() {
+    const item = selectedItem()
+    if (item?.type !== "session" || !item.session || !item.isCurrent) {
+      toast.show({ message: "Only Current items can be removed from Current", variant: "info", duration: 1500 })
+      return
+    }
+
+    const nextIds = removeCurrentSessionId(currentSessionIds(), item.session.id)
+    persistCurrentSessionIds(nextIds)
+    toast.show({ message: "Removed from Current", variant: "info", duration: 1500 })
+  }
 
   createEffect(() => {
     const len = groupedItems().length
@@ -298,7 +350,7 @@ export function Home() {
     sync.refresh()
   }
 
-  async function doAttach(session: Session) {
+  async function doAttach(session: Session, sourceItem?: GroupedItem) {
     previewFetchAbort = true
 
     // For remote sessions, ensure ControlMaster is alive before suspending the
@@ -328,6 +380,7 @@ export function Home() {
       return
     }
     renderer.resume()
+    rememberCurrentSession(session, sourceItem)
     sync.refresh()
 
     // Check if user pressed Ctrl+K to open command palette (local only)
@@ -336,7 +389,7 @@ export function Home() {
     }
   }
 
-  function handleAttach(session: Session) {
+  function handleAttach(session: Session, sourceItem = selectedItem()) {
     if (!session.tmuxSession) {
       toast.show({ message: "Session has no tmux session", variant: "error", duration: 2000 })
       return
@@ -367,7 +420,7 @@ export function Home() {
               }
               toast.show({ message: `Session ${opt.value === "resume" ? "resumed" : "restarted"}`, variant: "success", duration: 2000 })
               sync.refresh()
-              doAttach(updated)
+              doAttach(updated, sourceItem)
             } catch (err) {
               toast.error(err as Error)
             }
@@ -377,7 +430,7 @@ export function Home() {
       return
     }
 
-    doAttach(session)
+    doAttach(session, sourceItem)
   }
 
   async function handleDelete(session: Session) {
@@ -426,6 +479,10 @@ export function Home() {
   async function handleShortcut(shortcut: ReturnType<typeof getShortcuts>[0]) {
     try {
       const session = await executeShortcut({ shortcut })
+      const nextIds = addCurrentSessionId(currentSessionIds(), session.id)
+      if (!sameIds(currentSessionIds(), nextIds)) {
+        persistCurrentSessionIds(nextIds)
+      }
       const groupPath = getShortcutGroupPath(shortcut)
       toast.show({
         message: `Created '${shortcut.name}' in ${groupPath} group`,
@@ -488,7 +545,7 @@ export function Home() {
       } else if (item?.type === "group" && item.group && !item.group.expanded) {
         sync.group.toggle(item.group.path)
       } else if (item?.type === "session" && item.session) {
-        handleAttach(item.session)
+        handleAttach(item.session, item)
       }
     }
 
@@ -516,12 +573,18 @@ export function Home() {
     if (evt.name === "return") {
       const item = selectedItem()
       if (item?.type === "session" && item.session) {
-        handleAttach(item.session)
+        handleAttach(item.session, item)
       } else if (item?.type === "group" && item.virtualType === "current") {
         setCurrentExpanded(!currentExpanded())
       } else if (item?.type === "group" && item.group) {
         sync.group.toggle(item.group.path)
       }
+    }
+
+    // x to remove a session from Current without affecting the real session.
+    if (evt.name === "x" && !evt.shift && !evt.ctrl) {
+      removeSelectedFromCurrent()
+      return
     }
 
     // d to delete session OR group
@@ -640,9 +703,11 @@ export function Home() {
       const session = selectedSession()
       log("y pressed: session=", session?.id, "status=", session?.status, "tmux=", session?.tmuxSession, "remote=", session?.remoteHost)
       if (session && session.status === "waiting" && session.tmuxSession) {
+        const item = selectedItem()
         const confirmInput = session.tool === "codex" ? "y" : ""
         getSessionManager().sendMessage(session.id, confirmInput).then(() => {
           log("y sendMessage success")
+          rememberCurrentSession(session, item)
           toast.show({ message: "✓ Confirmed", variant: "success", duration: 1500 })
           sync.refresh()
         }).catch((err) => {
@@ -822,7 +887,7 @@ export function Home() {
         onMouseUp={() => {
           setInputMode("mouse")
           setSelectedIndex(props.index)
-          handleAttach(props.session)
+          handleAttach(props.session, groupedItems()[props.index])
         }}
         onMouseOver={() => {
           if (inputMode() === "mouse") setSelectedIndex(props.index)
