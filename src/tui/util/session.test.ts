@@ -2,6 +2,7 @@ import { describe, test, expect } from "bun:test"
 import {
   addCurrentSessionId,
   getCurrentSessions,
+  getCurrentSessionIdsAfterRefresh,
   normalizeCurrentSessionIds,
   removeCurrentSessionId,
   sortSessionsByCreatedAt
@@ -242,5 +243,30 @@ describe("current session id helpers", () => {
     )
 
     expect(result).toEqual(["idle", "running"])
+  })
+
+  test("getCurrentSessionIdsAfterRefresh preserves stored ids during incomplete refreshes", () => {
+    const result = getCurrentSessionIdsAfterRefresh(
+      ["a", "b"],
+      [],
+      { hasPersistedIds: true }
+    )
+
+    expect(result).toEqual(["a", "b"])
+  })
+
+  test("getCurrentSessionIdsAfterRefresh seeds ids only before config has persisted ids", () => {
+    const sessions = [
+      createMockSession({ id: "older", lastAccessed: new Date("2024-01-01T10:00:00Z") }),
+      createMockSession({ id: "newer", lastAccessed: new Date("2024-01-02T10:00:00Z") }),
+    ]
+
+    const result = getCurrentSessionIdsAfterRefresh(
+      [],
+      sessions,
+      { hasPersistedIds: false }
+    )
+
+    expect(result).toEqual(["newer", "older"])
   })
 })

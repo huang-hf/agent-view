@@ -35,7 +35,7 @@ import { STATUS_ICONS } from "@tui/util/status"
 import {
   addCurrentSessionId,
   getCurrentSessions,
-  normalizeCurrentSessionIds,
+  getCurrentSessionIdsAfterRefresh,
   removeCurrentSessionId
 } from "@tui/util/session"
 import { createListNavigation } from "@tui/util/navigation"
@@ -189,9 +189,9 @@ export function Home() {
     const sessions = allSessions()
     const configIds = getConfig().currentSessionIds
     const existingIds = currentSessionIds()
-    const nextIds = configIds === undefined && existingIds.length === 0
-      ? getCurrentSessions(sessions).map(s => s.id)
-      : normalizeCurrentSessionIds(existingIds, sessions)
+    const nextIds = getCurrentSessionIdsAfterRefresh(existingIds, sessions, {
+      hasPersistedIds: configIds !== undefined
+    })
 
     if (!sameIds(existingIds, nextIds)) {
       persistCurrentSessionIds(nextIds)

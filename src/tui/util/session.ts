@@ -75,3 +75,13 @@ export function addCurrentSessionId(
 export function removeCurrentSessionId(ids: string[], sessionId: string): string[] {
   return ids.filter((id) => id !== sessionId)
 }
+
+export function getCurrentSessionIdsAfterRefresh(
+  ids: string[],
+  sessions: Session[],
+  options: { hasPersistedIds: boolean; limit?: number }
+): string[] {
+  if (options.hasPersistedIds) return ids
+  if (ids.length > 0) return ids
+  return getCurrentSessions(sessions, { limit: options.limit }).map((session) => session.id)
+}
