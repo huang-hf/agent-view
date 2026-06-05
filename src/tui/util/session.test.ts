@@ -1,6 +1,7 @@
 import { describe, test, expect } from "bun:test"
 import {
   addCurrentSessionId,
+  getInitialCurrentSessionIds,
   getCurrentSessions,
   getCurrentSessionIdsAfterRefresh,
   normalizeCurrentSessionIds,
@@ -214,6 +215,25 @@ describe("getCurrentSessions", () => {
 })
 
 describe("current session id helpers", () => {
+  test("getInitialCurrentSessionIds uses persisted ids when present", () => {
+    const sessions = [
+      createMockSession({ id: "newer", lastAccessed: new Date("2024-01-02T10:00:00Z") }),
+      createMockSession({ id: "older", lastAccessed: new Date("2024-01-01T10:00:00Z") }),
+    ]
+
+    expect(getInitialCurrentSessionIds(["older"], sessions)).toEqual(["older"])
+    expect(getInitialCurrentSessionIds([], sessions)).toEqual([])
+  })
+
+  test("getInitialCurrentSessionIds seeds from sessions when persisted ids are missing", () => {
+    const sessions = [
+      createMockSession({ id: "older", lastAccessed: new Date("2024-01-01T10:00:00Z") }),
+      createMockSession({ id: "newer", lastAccessed: new Date("2024-01-02T10:00:00Z") }),
+    ]
+
+    expect(getInitialCurrentSessionIds(undefined, sessions)).toEqual(["newer", "older"])
+  })
+
   test("addCurrentSessionId prepends new ids and preserves existing positions", () => {
     expect(addCurrentSessionId(["a", "b"], "c")).toEqual(["c", "a", "b"])
     expect(addCurrentSessionId(["a", "b"], "b")).toEqual(["a", "b"])

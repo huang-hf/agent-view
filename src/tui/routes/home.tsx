@@ -34,6 +34,7 @@ import { formatRelativeTime, truncatePath } from "@tui/util/locale"
 import { STATUS_ICONS } from "@tui/util/status"
 import {
   addCurrentSessionId,
+  getInitialCurrentSessionIds,
   getCurrentSessions,
   getCurrentSessionIdsAfterRefresh,
   removeCurrentSessionId
@@ -113,7 +114,10 @@ export function Home() {
   const [previewContent, setPreviewContent] = createSignal<string>("")
   const [previewLoading, setPreviewLoading] = createSignal(false)
   const [currentExpanded, setCurrentExpanded] = createSignal(true)
-  const [currentSessionIds, setCurrentSessionIds] = createSignal<string[]>(getConfig().currentSessionIds ?? [])
+  const initialCurrentConfigIds = getConfig().currentSessionIds
+  const [currentSessionIds, setCurrentSessionIds] = createSignal<string[]>(
+    getInitialCurrentSessionIds(initialCurrentConfigIds, sync.session.list())
+  )
   let scrollRef: ScrollBoxRenderable | undefined
   let previewScrollRef: ScrollBoxRenderable | undefined
   let previewDebounceTimer: ReturnType<typeof setTimeout> | undefined
@@ -193,7 +197,7 @@ export function Home() {
       hasPersistedIds: configIds !== undefined
     })
 
-    if (!sameIds(existingIds, nextIds)) {
+    if (!sameIds(existingIds, nextIds) || (configIds === undefined && existingIds.length > 0)) {
       persistCurrentSessionIds(nextIds)
     }
   })
