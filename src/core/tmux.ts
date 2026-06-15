@@ -35,7 +35,7 @@ export interface TmuxExecutor {
   /** Run a tmux subcommand that produces no relevant output */
   execFile(args: string[]): Promise<void>
   /** Full-screen attach (replaces current terminal process) */
-  spawnAttach(sessionName: string): void
+  spawnAttach(sessionName: string, options?: { sessionId?: string }): void | Promise<void>
 }
 
 export class LocalTmuxExecutor implements TmuxExecutor {
@@ -51,7 +51,7 @@ export class LocalTmuxExecutor implements TmuxExecutor {
     await execFileAsync("tmux", tmuxSpawnArgs(...args))
   }
 
-  spawnAttach(sessionName: string): void {
+  spawnAttach(sessionName: string, _options?: { sessionId?: string }): void {
     attachSessionSync(sessionName)
   }
 }
@@ -579,7 +579,6 @@ export function stripAnsi(text: string): string {
 // These indicate Claude is in the middle of processing
 const CLAUDE_BUSY_PATTERNS = [
   /ctrl\+c to interrupt/i,
-  /….*tokens/i,  // Processing indicator with tokens count
 ]
 
 // Spinner characters used by Claude Code when processing
@@ -681,9 +680,10 @@ export function parseToolStatusDebug(output: string, tool?: string): ToolStatusD
   }
   const trimmedLines = allLines.slice(0, lastNonEmptyIdx + 1)
   const lastLines = trimmedLines.slice(-30).join("\n")
-  const lastWideLines = trimmedLines.slice(-120).join("\n")
   const recentLines = trimmedLines.slice(-12).join("\n")
   const lastFewLines = trimmedLines.slice(-10).join("\n")
+  const recentNonEmptyLines = trimmedLines.filter(line => line.trim() !== "")
+  const codexTailLines = recentNonEmptyLines.slice(-4).join("\n")
 
   let isWaiting = false
   let isBusy = false
@@ -715,9 +715,10 @@ export function parseToolStatusDebug(output: string, tool?: string): ToolStatusD
     }
     // If Claude has exited, both isBusy and isWaiting stay false -> will become idle
   } else if (tool === "codex") {
-    // Codex approval blocks can move above the last 30 lines when command output
-    // is noisy. Use a wider context window and codex-specific prompt rules.
-    const matchedCodexWaiting = CODEX_WAITING_PATTERNS.find(p => p.test(lastWideLines))
+    // Restrict codex waiting detection to the recent bottom-of-screen content so
+    // stale approval prompts do not keep the session stuck in waiting after a
+    // decision has already been made and new output is flowing.
+    const matchedCodexWaiting = CODEX_WAITING_PATTERNS.find(p => p.test(codexTailLines))
     isWaiting = !!matchedCodexWaiting
     if (matchedCodexWaiting) waitingReason = matchedCodexWaiting.source
   } else {

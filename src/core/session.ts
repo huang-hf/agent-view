@@ -41,8 +41,8 @@ function generateTitle(): string {
   return `${adj}-${noun}`
 }
 
-const LOCAL_WAITING_EXIT_GRACE_POLLS = 2
-const REMOTE_WAITING_EXIT_GRACE_POLLS = 2
+const LOCAL_WAITING_EXIT_GRACE_POLLS = 1
+const REMOTE_WAITING_EXIT_GRACE_POLLS = 1
 const REMOTE_STOP_GRACE_POLLS = 3
 const RUNNING_EXIT_GRACE_POLLS = 3
 
@@ -328,7 +328,7 @@ export class SessionManager {
         continue
       }
 
-      const isActive = tmux.isSessionActive(session.tmuxSession, 2)
+      const isActive = tmux.isSessionActive(session.tmuxSession, 1)
 
       // Always capture output and check patterns - not just when active
       // This fixes the bug where waiting sessions were incorrectly marked as idle
@@ -955,6 +955,9 @@ export class SessionManager {
 
     log("attach() sessionId:", sessionId, "tmuxSession:", session.tmuxSession, "remoteHost:", session.remoteHost)
     const executor = this.getExecutor(session.remoteHost)
+    if (!session.remoteHost) {
+      await tmux.installScratchpadBinding(session.tmuxSession, sessionId)
+    }
     await executor.spawnAttach(session.tmuxSession, { sessionId })
     log("attach() returned from spawnAttach")
   }

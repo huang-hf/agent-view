@@ -36,14 +36,8 @@ describe("deriveRemoteSessionStatus", () => {
 })
 
 describe("stabilizeRemoteWaitingTransition", () => {
-  test("keeps waiting on first transient non-waiting poll", () => {
+  test("exits waiting on first non-waiting poll", () => {
     const result = stabilizeRemoteWaitingTransition("waiting", "idle", 0)
-    expect(result.next).toBe("waiting")
-    expect(result.polls).toBe(1)
-  })
-
-  test("exits waiting after grace polls", () => {
-    const result = stabilizeRemoteWaitingTransition("waiting", "idle", 1)
     expect(result.next).toBe("idle")
     expect(result.polls).toBe(0)
   })

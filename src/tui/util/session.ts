@@ -85,6 +85,38 @@ export function getInitialCurrentSessionIds(
   return getCurrentSessions(sessions, { limit: options.limit }).map((session) => session.id)
 }
 
+export function mergeCurrentSessionSnapshots(
+  previous: Session[],
+  sessions: Session[],
+  ids: string[],
+  options: { limit?: number } = {}
+): Session[] {
+  const limit = options.limit ?? CURRENT_SESSIONS_LIMIT
+  const previousById = new Map(previous.map((session) => [session.id, session]))
+  const sessionsById = new Map(sessions.map((session) => [session.id, session]))
+  const result: Session[] = []
+  const seen = new Set<string>()
+
+  for (const id of ids) {
+    if (seen.has(id)) continue
+    seen.add(id)
+
+    const live = sessionsById.get(id)
+    if (live) {
+      if (CURRENT_SESSION_STATUSES.has(live.status)) {
+        result.push(live)
+      }
+    } else {
+      const snapshot = previousById.get(id)
+      if (snapshot) result.push(snapshot)
+    }
+
+    if (result.length >= limit) break
+  }
+
+  return result
+}
+
 export function getCurrentSessionIdsAfterRefresh(
   ids: string[],
   sessions: Session[],

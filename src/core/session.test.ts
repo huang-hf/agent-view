@@ -4,6 +4,7 @@ import os from "os"
 import path from "path"
 import { SessionManager } from "./session"
 import { localExecutor } from "./tmux"
+import * as tmux from "./tmux"
 import { Storage, setStorage } from "./storage"
 import type { Session } from "./types"
 
@@ -31,6 +32,7 @@ function makeSession(overrides: Partial<Session> = {}): Session {
     worktreeBranch: "",
     toolData: {},
     acknowledged: false,
+    remoteHost: "",
     ...overrides
   }
 }
@@ -54,16 +56,18 @@ afterEach(() => {
 })
 
 describe("SessionManager.attach", () => {
-  test("updates lastAccessed before attaching", async () => {
+  test("installs local scratchpad binding before attaching", async () => {
     const initialLastAccessed = new Date("2026-05-13T00:00:00.000Z")
     const session = makeSession({ lastAccessed: initialLastAccessed })
     testStorage!.saveSession(session)
 
+    const installSpy = spyOn(tmux, "installScratchpadBinding").mockResolvedValue()
     const attachSpy = spyOn(localExecutor, "spawnAttach").mockImplementation(() => {})
 
     const manager = new SessionManager()
     await manager.attach(session.id)
 
+    expect(installSpy).toHaveBeenCalledWith(session.tmuxSession, session.id)
     expect(attachSpy).toHaveBeenCalledWith(session.tmuxSession, { sessionId: session.id })
     expect(testStorage!.getSession(session.id)!.lastAccessed.getTime()).toBeGreaterThan(initialLastAccessed.getTime())
   })

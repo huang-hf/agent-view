@@ -5,6 +5,7 @@ import {
   getCurrentSessions,
   getCurrentSessionIdsAfterRefresh,
   normalizeCurrentSessionIds,
+  mergeCurrentSessionSnapshots,
   removeCurrentSessionId,
   sortSessionsByCreatedAt
 } from "./session"
@@ -232,6 +233,47 @@ describe("current session id helpers", () => {
     ]
 
     expect(getInitialCurrentSessionIds(undefined, sessions)).toEqual(["newer", "older"])
+  })
+
+  test("mergeCurrentSessionSnapshots keeps previous sessions during incomplete refreshes", () => {
+    const previous = [
+      createMockSession({ id: "kept", title: "Previous" }),
+    ]
+    const live = [
+      createMockSession({ id: "other", title: "Other" }),
+    ]
+
+    const result = mergeCurrentSessionSnapshots(previous, live, ["kept"])
+
+    expect(result.map(s => s.id)).toEqual(["kept"])
+    expect(result[0]).toBe(previous[0])
+  })
+
+  test("mergeCurrentSessionSnapshots updates previous sessions from live data", () => {
+    const previous = [
+      createMockSession({ id: "kept", title: "Previous" }),
+    ]
+    const live = [
+      createMockSession({ id: "kept", title: "Live" }),
+    ]
+
+    const result = mergeCurrentSessionSnapshots(previous, live, ["kept"])
+
+    expect(result.map(s => s.title)).toEqual(["Live"])
+    expect(result[0]).toBe(live[0])
+  })
+
+  test("mergeCurrentSessionSnapshots removes sessions that are live but inactive", () => {
+    const previous = [
+      createMockSession({ id: "stopped", status: "running" }),
+    ]
+    const live = [
+      createMockSession({ id: "stopped", status: "stopped" }),
+    ]
+
+    const result = mergeCurrentSessionSnapshots(previous, live, ["stopped"])
+
+    expect(result).toEqual([])
   })
 
   test("addCurrentSessionId prepends new ids and preserves existing positions", () => {

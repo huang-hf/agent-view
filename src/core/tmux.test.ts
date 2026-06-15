@@ -192,6 +192,19 @@ Do you want to refactor this helper function?`
     expect(status.isBusy).toBe(true)
   })
 
+  test("does not treat Claude prompt footer token count as busy", () => {
+    const output = `Completed the migration and tests.
+
+✻ Churned for 4m 23s
+
+❯
+────────────────────────────────────────────────────────────────────
+  ? for shortcuts                                                     … new task? /clear to save 111.9k tokens`
+    const status = parseToolStatus(output, "claude")
+    expect(status.isBusy).toBe(false)
+    expect(status.isWaiting).toBe(false)
+  })
+
   test("does not stay waiting when stale approval text is above fresh spinner output", () => {
     const output = `Do you want to proceed?
   1. Yes
@@ -203,6 +216,18 @@ Accepted. Continuing...
     const status = parseToolStatus(output, "claude")
     expect(status.isWaiting).toBe(false)
     expect(status.isBusy).toBe(true)
+  })
+
+  test("does not keep codex waiting when old approval text is above fresh output", () => {
+    const output = `Approval required
+› 1. Yes, proceed (y)
+  2. No, cancel (n)
+
+Command approved.
+Applying patch to src/core/session.ts
+Done.`
+    const status = parseToolStatus(output, "codex")
+    expect(status.isWaiting).toBe(false)
   })
 
   test("still detects Claude waiting when the prompt is near the bottom", () => {

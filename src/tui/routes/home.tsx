@@ -3,7 +3,7 @@
  * Shows session list on left, preview pane on right
  */
 
-import { createMemo, createSignal, For, Show, createEffect, onCleanup, type Accessor } from "solid-js"
+import { createMemo, createSignal, For, Show, createEffect, onCleanup, Index, type Accessor } from "solid-js"
 import { TextAttributes, ScrollBoxRenderable } from "@opentui/core"
 import { useTerminalDimensions, useKeyboard, useRenderer } from "@opentui/solid"
 import { useTheme } from "@tui/context/theme"
@@ -37,9 +37,11 @@ import {
   getInitialCurrentSessionIds,
   getCurrentSessions,
   getCurrentSessionIdsAfterRefresh,
+  mergeCurrentSessionSnapshots,
   removeCurrentSessionId
 } from "@tui/util/session"
 import { createListNavigation } from "@tui/util/navigation"
+import { startHomePreviewLoop } from "@tui/util/preview"
 import {
   flattenGroupTree,
   prependCurrentGroup,
@@ -114,13 +116,16 @@ export function Home() {
   const [previewContent, setPreviewContent] = createSignal<string>("")
   const [previewLoading, setPreviewLoading] = createSignal(false)
   const [currentExpanded, setCurrentExpanded] = createSignal(true)
+  const initialSessions = sync.session.list()
   const initialCurrentConfigIds = getConfig().currentSessionIds
-  const [currentSessionIds, setCurrentSessionIds] = createSignal<string[]>(
-    getInitialCurrentSessionIds(initialCurrentConfigIds, sync.session.list())
+  const initialCurrentSessionIds = getInitialCurrentSessionIds(initialCurrentConfigIds, initialSessions)
+  const [currentSessionIds, setCurrentSessionIds] = createSignal<string[]>(initialCurrentSessionIds)
+  const [currentSessionSnapshots, setCurrentSessionSnapshots] = createSignal<Session[]>(
+    getCurrentSessions(initialSessions, { ids: initialCurrentSessionIds })
   )
   let scrollRef: ScrollBoxRenderable | undefined
   let previewScrollRef: ScrollBoxRenderable | undefined
-  let previewDebounceTimer: ReturnType<typeof setTimeout> | undefined
+  let stopPreviewLoop: (() => void) | undefined
   let previewFetchAbort = false
 
   const useDualColumn = createMemo(() => dimensions().width >= DUAL_COLUMN_MIN_WIDTH)
@@ -168,7 +173,7 @@ export function Home() {
   })
 
   const allSessions = createMemo(() => sync.session.list())
-  const currentSessions = createMemo(() => getCurrentSessions(allSessions(), { ids: currentSessionIds() }))
+  const currentSessions = createMemo(() => currentSessionSnapshots())
 
   const groupedItems = createMemo(() => {
     const groups = ensureDefaultGroup(sync.group.list())
@@ -178,6 +183,10 @@ export function Home() {
 
   function sameIds(a: string[], b: string[]): boolean {
     return a.length === b.length && a.every((id, idx) => id === b[idx])
+  }
+
+  function sameSessions(a: Session[], b: Session[]): boolean {
+    return a.length === b.length && a.every((session, idx) => session === b[idx])
   }
 
   async function persistCurrentSessionIds(ids: string[]) {
@@ -199,6 +208,14 @@ export function Home() {
 
     if (!sameIds(existingIds, nextIds) || (configIds === undefined && existingIds.length > 0)) {
       persistCurrentSessionIds(nextIds)
+    }
+  })
+
+  createEffect(() => {
+    const existing = currentSessionSnapshots()
+    const next = mergeCurrentSessionSnapshots(existing, allSessions(), currentSessionIds())
+    if (!sameSessions(existing, next)) {
+      setCurrentSessionSnapshots(next)
     }
   })
 
@@ -251,9 +268,8 @@ export function Home() {
   createEffect(() => {
     const session = selectedSession()
 
-    if (previewDebounceTimer) {
-      clearTimeout(previewDebounceTimer)
-    }
+    stopPreviewLoop?.()
+    stopPreviewLoop = undefined
 
     if (!session || !session.tmuxSession) {
       setPreviewContent("")
@@ -273,8 +289,7 @@ export function Home() {
       }
     }, 0)
 
-    // Debounce: 150ms delay to prevent rapid fetching during navigation
-    previewDebounceTimer = setTimeout(async () => {
+    stopPreviewLoop = startHomePreviewLoop(async () => {
       if (previewFetchAbort) return
 
       try {
@@ -305,14 +320,12 @@ export function Home() {
           setPreviewLoading(false)
         }
       }
-    }, 150)
+    })
   })
 
   onCleanup(() => {
     previewFetchAbort = true
-    if (previewDebounceTimer) {
-      clearTimeout(previewDebounceTimer)
-    }
+    stopPreviewLoop?.()
   })
 
   const stats = createMemo(() => {
@@ -709,13 +722,13 @@ export function Home() {
       if (session && session.status === "waiting" && session.tmuxSession) {
         const item = selectedItem()
         const confirmInput = session.tool === "codex" ? "y" : ""
-        getSessionManager().sendMessage(session.id, confirmInput).then(() => {
-          log("y sendMessage success")
+        getSessionManager().confirmWaiting(session.id, confirmInput).then(() => {
+          log("y confirmWaiting success")
           rememberCurrentSession(session, item)
           toast.show({ message: "✓ Confirmed", variant: "success", duration: 1500 })
           sync.refresh()
         }).catch((err) => {
-          log("y sendMessage error:", err)
+          log("y confirmWaiting error:", err)
           toast.error(err as Error)
         })
       } else {
@@ -1100,22 +1113,22 @@ export function Home() {
               scrollbarOptions={{ visible: true }}
               ref={(r: ScrollBoxRenderable) => { scrollRef = r }}
             >
-              <For each={groupedItems()}>
+              <Index each={groupedItems()}>
                 {(item, index) => (
                   <Show
-                    when={item.type === "group"}
+                    when={item().type === "group"}
                     fallback={
                       <SessionItem
-                        session={item.session!}
-                        index={index()}
+                        session={item().session!}
+                        index={index}
                         indented={true}
                       />
                     }
                   >
-                    <GroupHeader item={item} index={index()} />
+                    <GroupHeader item={item()} index={index} />
                   </Show>
                 )}
-              </For>
+              </Index>
             </scrollbox>
           </box>
 
