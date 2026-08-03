@@ -24,6 +24,10 @@ export type CLICommand =
   | { type: "hibernate"; id: string }
   | { type: "wake"; id: string }
   | { type: "auto-hibernate"; minutes?: number }
+  | { type: "task-add"; text: string }
+  | { type: "task-list" }
+  | { type: "task-done"; id: string }
+  | { type: "task-edit"; id: string; text: string }
 
 export interface NewOptions {
   path: string
@@ -264,6 +268,40 @@ export function parseArgs(argv: string[]): CLICommand {
       return { type: "auto-hibernate", minutes }
     }
     return { type: "auto-hibernate" }
+  }
+
+  if (args[0] === "task") {
+    const sub = args[1]
+    if (sub === "add") {
+      const text = args.slice(2).join(" ")
+      if (!text) {
+        console.error("Usage: av task add <text>")
+        process.exit(1)
+      }
+      return { type: "task-add", text }
+    }
+    if (sub === "list") {
+      return { type: "task-list" }
+    }
+    if (sub === "done") {
+      const id = args[2]
+      if (!id) {
+        console.error("Usage: av task done <id>")
+        process.exit(1)
+      }
+      return { type: "task-done", id }
+    }
+    if (sub === "edit") {
+      const id = args[2]
+      const text = args.slice(3).join(" ")
+      if (!id || !text) {
+        console.error("Usage: av task edit <id> <text>")
+        process.exit(1)
+      }
+      return { type: "task-edit", id, text }
+    }
+    console.error("Unknown task subcommand. Usage: av task [add|list|done|edit]")
+    process.exit(1)
   }
 
   // Fallback: TUI mode with optional --light

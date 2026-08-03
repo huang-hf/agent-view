@@ -18,6 +18,7 @@ const execFileAsync = promisify(execFile)
 async function executeHeadlessCommand(command: CLICommand): Promise<void> {
   // Lazy import to avoid loading TUI dependencies for headless commands
   const { cmdNew, cmdList, cmdDelete, cmdStop, cmdRestart, cmdAttach, cmdStatus, cmdInfo, cmdSend, cmdAcknowledge, cmdConfirm, cmdInterrupt, cmdOutput, cmdHibernate, cmdWake, cmdAutoHibernate } = await import("./cli/commands")
+  const { cmdTaskAdd, cmdTaskList, cmdTaskDone, cmdTaskEdit } = await import("./cli/task")
 
   switch (command.type) {
     case "new":
@@ -67,6 +68,18 @@ async function executeHeadlessCommand(command: CLICommand): Promise<void> {
       break
     case "auto-hibernate":
       await cmdAutoHibernate(command.minutes)
+      break
+    case "task-add":
+      await cmdTaskAdd(command.text)
+      break
+    case "task-list":
+      await cmdTaskList()
+      break
+    case "task-done":
+      await cmdTaskDone(command.id)
+      break
+    case "task-edit":
+      await cmdTaskEdit(command.id, command.text)
       break
   }
 }
