@@ -17,6 +17,7 @@
     "release": "bun run scripts/release.ts",
     "dev": "bun run scripts/build.ts && bun run dist/index.js",
     "start": "bun run dist/index.js",
+    "probe:ssh-latency": "bun run scripts/ssh-latency-probe.ts",
     "test": "bun test",
     "test:watch": "bun test --watch",
     "typecheck": "tsc --noEmit"

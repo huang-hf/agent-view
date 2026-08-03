@@ -147,49 +147,77 @@ export function Tasks() {
     ))
   }
 
+  function stop(evt: { stopPropagation(): void; preventDefault(): void }) {
+    evt.stopPropagation()
+    evt.preventDefault()
+  }
+
   useKeyboard((evt) => {
     if (dialog.stack.length > 0) return
 
     if (evt.name === "j") {
       setSelectedIndex(i => clampIndex(i + 1))
-      return
+      return stop(evt)
     }
     if (evt.name === "k") {
       setSelectedIndex(i => clampIndex(i - 1))
-      return
+      return stop(evt)
     }
     if (evt.name === "up") {
       moveUp()
-      return
+      return stop(evt)
     }
     if (evt.name === "down") {
       moveDown()
-      return
+      return stop(evt)
     }
     if (evt.name === "return" || evt.name === "e") {
       const task = tasks()[selectedIndex()]
       if (task) editTask(task)
-      return
+      return stop(evt)
     }
     if (evt.name === "n") {
       newTask()
-      return
+      return stop(evt)
     }
     if (evt.name === "space") {
       toggleDone()
-      return
+      return stop(evt)
     }
     if (evt.name === "d") {
       deleteTask()
-      return
+      return stop(evt)
     }
     if (evt.name === "s") {
       sendToSession()
-      return
+      return stop(evt)
+    }
+    if (evt.name === "?") {
+      dialog.push(() => (
+        <DialogSelect
+          title="任务看板快捷键"
+          options={[
+            { title: "j / k        — 上下移动光标", value: "" },
+            { title: "↑ / ↓       — 调整任务排序", value: "" },
+            { title: "n           — 新建任务（vim 编辑）", value: "" },
+            { title: "Enter / e   — 编辑当前任务", value: "" },
+            { title: "Space       — 切换完成状态", value: "" },
+            { title: "s           — 发送给 session", value: "" },
+            { title: "d           — 删除任务", value: "" },
+            { title: "q / Escape  — 返回主屏", value: "" },
+          ]}
+          onSelect={() => dialog.pop()}
+        />
+      ))
+      return stop(evt)
     }
     if (evt.name === "q" || evt.name === "escape") {
-      route.back()
-      return
+      if (route.canGoBack()) {
+        route.back()
+      } else {
+        route.navigate({ type: "home" })
+      }
+      return stop(evt)
     }
   })
 
@@ -230,8 +258,8 @@ export function Tasks() {
       <text x={0} y={h() - 2}>
         {"─".repeat(w())}
       </text>
-      <text x={1} y={h() - 1} dim>
-        {"j/k:移动  ↑/↓:排序  n:新建  Enter:编辑  space:完成  s:发送  d:删除  q:返回"}
+      <text x={1} y={h() - 1}>
+        {"n:新建  Enter:编辑  space:完成  s:发送  d:删除  q:返回  ?:帮助"}
       </text>
     </box>
   )
