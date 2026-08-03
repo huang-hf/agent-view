@@ -1,31 +1,31 @@
-# Task Board & Team Mode Design
+# 任务看板与团队模式设计
 
-## Overview
+## 概述
 
-Two related features:
+两个关联功能：
 
-1. **Task Board** — a dedicated screen for recording and managing text todo items
-2. **Team Mode** — sending tasks to existing sessions (roles), plus a CLI for agents to create/manage tasks
+1. **任务看板** — 独立页面，用于记录和管理文本待办任务
+2. **团队模式** — 将任务发送给已有的 session（角色），以及供 agent 使用的 CLI 命令
 
-These are intentionally lightweight. Tasks are plain text. No project binding, no priorities, no assignee metadata beyond "which session did I send this to."
+设计刻意保持轻量。任务就是纯文本，不绑定项目，没有优先级，没有除"发送给哪个 session"之外的元数据。
 
 ---
 
-## Data Model
+## 数据模型
 
-### `Task` type (`src/core/types.ts`)
+### `Task` 类型（`src/core/types.ts`）
 
 ```ts
 export interface Task {
   id: string
-  text: string    // full task content, single field
+  text: string    // 任务内容，单字段纯文本
   done: boolean
   createdAt: Date
   order: number
 }
 ```
 
-### SQLite table (`src/core/storage.ts`)
+### SQLite 表（`src/core/storage.ts`）
 
 ```sql
 CREATE TABLE IF NOT EXISTS tasks (
@@ -37,31 +37,31 @@ CREATE TABLE IF NOT EXISTS tasks (
 )
 ```
 
-Schema version bumped from 2 → 3. Migration adds the `tasks` table; existing installations upgrade automatically on first run.
+schema version 从 2 升到 3，首次运行时自动迁移，已有数据不受影响。
 
-### Storage methods added to `Storage` class
+### Storage 类新增方法
 
 - `loadTasks(): Task[]`
 - `saveTask(task: Task): void`
 - `deleteTask(id: string): void`
 - `updateTaskField(id: string, field: string, value: unknown): void`
 
-Pattern is identical to existing session CRUD.
+模式与现有 session CRUD 完全一致。
 
 ---
 
-## UI: Task Board Screen
+## UI：任务看板页面
 
-### Navigation
+### 导航
 
-- Press `t` on the home screen to enter the task board
-- Press `q` or `Escape` to return to home
+- 主屏按 `t` 进入任务看板
+- 按 `q` 或 `Escape` 返回主屏
 
-### Layout
+### 布局
 
 ```
 ┌─────────────────────────────────────────┐
-│  Tasks                        [2/5 done] │
+│  Tasks                        [2/5 完成] │
 ├─────────────────────────────────────────┤
 │ ► [ ] power model 上线 qwen3-235b        │
 │   [x] 更新 gradio inference 服务版本     │
@@ -73,74 +73,74 @@ Pattern is identical to existing session CRUD.
 └─────────────────────────────────────────┘
 ```
 
-Header shows `[done/total]` count. Done tasks render with `[x]` and dimmed text. Cursor is highlighted with `►`.
+标题栏显示 `[已完成/总数]`。已完成任务显示 `[x]` 并用暗色渲染。当前光标位置用 `►` 标记。
 
-### Keybinds
+### 键位
 
-| Key | Action |
+| 键 | 动作 |
 |---|---|
-| `↑` / `↓` | Move cursor |
-| `n` | New task — opens text input at bottom |
-| `space` | Toggle done/undone |
-| `e` | Edit task text — opens text input pre-filled |
-| `d` | Delete task (no confirmation) |
-| `s` | Send to session |
-| `q` / `Escape` | Return to home |
+| `↑` / `↓` | 移动光标 |
+| `n` | 新建任务 — 底部弹出文本输入框 |
+| `space` | 切换完成/未完成 |
+| `e` | 编辑任务文本 — 底部弹出预填内容的输入框 |
+| `d` | 删除任务（无需确认） |
+| `s` | 发送给 session |
+| `q` / `Escape` | 返回主屏 |
 
-### New/Edit Input
+### 新建/编辑输入框
 
-Reuses the dialog-rename pattern: a single-line text input rendered at the bottom of the screen. `Enter` confirms, `Escape` cancels. For new tasks, a `nanoid`-generated id and current timestamp are assigned on save.
+复用 dialog-rename 的模式：底部渲染单行文本输入框，`Enter` 确认，`Escape` 取消。新建时自动生成 nanoid 作为 id，记录当前时间戳。
 
-### Send to Session (`s` key)
+### 发送给 Session（`s` 键）
 
-Opens a `DialogSelect` listing all sessions with status `running`, `waiting`, or `idle`. Selecting a session calls `sendKeys(session.tmuxSession, task.text)`. A toast confirms "Sent to [session title]". The task is not automatically marked done.
+弹出 `DialogSelect`，列出所有状态为 `running`、`waiting` 或 `idle` 的 session。选中后调用 `sendKeys(session.tmuxSession, task.text)`，toast 提示"已发送给 [session 标题]"。任务不会自动标记为完成。
 
 ---
 
-## CLI: `av task` Subcommand
+## CLI：`av task` 子命令
 
-Agents running inside tmux sessions can manage tasks via shell commands. All operations write to the same SQLite database.
+在 tmux session 里跑的 agent 可以通过 shell 命令管理任务，所有操作写入同一个 SQLite 数据库。
 
 ```bash
-av task add "power model 上线 qwen3-235b"   # create task, prints new id
-av task list                                  # list all tasks with ids and status
-av task done <id>                             # mark task done
-av task edit <id> "new text"                  # replace task text
+av task add "power model 上线 qwen3-235b"   # 创建任务，输出新 id
+av task list                                  # 列出所有任务（含 id 和状态）
+av task done <id>                             # 标记完成
+av task edit <id> "新的内容"                  # 修改任务文本
 ```
 
-Output of `av task list`:
+`av task list` 输出格式：
 
 ```
-ID        DONE  TEXT
+ID        状态  内容
 a1b2c3    [ ]   power model 上线 qwen3-235b
 d4e5f6    [x]   更新 gradio inference 服务版本
 ```
 
-### Implementation
+### 实现位置
 
-New subcommand handler in `src/cli/` (e.g. `src/cli/task.ts`), wired into the main CLI entry point. Uses the same `Storage` class as the TUI.
+在 `src/cli/` 下新增 `src/cli/task.ts` 子命令处理器，接入主 CLI 入口。使用与 TUI 相同的 `Storage` 类。
 
 ---
 
-## Files Changed
+## 涉及文件
 
-| File | Change |
+| 文件 | 变更 |
 |---|---|
-| `src/core/types.ts` | Add `Task` interface |
-| `src/core/storage.ts` | Add `tasks` table, CRUD methods, schema v3 migration |
-| `src/tui/routes/tasks.tsx` | New task board screen |
-| `src/tui/component/dialog-task-input.tsx` | New/edit task text input |
-| `src/tui/routes/home.tsx` | Register `t` keybind to navigate to tasks |
-| `src/tui/routes/index.ts` | Register tasks route |
-| `src/cli/task.ts` | `av task` subcommand |
-| `src/cli/index.ts` | Wire in task subcommand |
+| `src/core/types.ts` | 新增 `Task` interface |
+| `src/core/storage.ts` | 新增 `tasks` 表、CRUD 方法、schema v3 迁移 |
+| `src/tui/routes/tasks.tsx` | 新建任务看板页面 |
+| `src/tui/component/dialog-task-input.tsx` | 新建/编辑任务的文本输入组件 |
+| `src/tui/routes/home.tsx` | 注册 `t` 键跳转任务看板 |
+| `src/tui/routes/index.ts` | 注册 tasks 路由 |
+| `src/cli/task.ts` | `av task` 子命令 |
+| `src/cli/index.ts` | 接入 task 子命令 |
 
 ---
 
-## Out of Scope
+## 不在范围内
 
-- Task priorities or tags
-- Per-project task lists (tasks are global)
-- Tracking which session a task was sent to
-- Automatic task completion when a session finishes
-- Task ordering via drag (keyboard reorder can be added later if needed)
+- 任务优先级或标签
+- 按项目区分的任务列表（任务是全局的）
+- 记录任务发给了哪个 session
+- session 完成后自动标记任务为完成
+- 拖拽排序（如有需要后续可加键盘排序）
