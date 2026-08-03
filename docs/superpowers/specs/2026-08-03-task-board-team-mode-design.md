@@ -79,17 +79,25 @@ schema version 从 2 升到 3，首次运行时自动迁移，已有数据不受
 
 | 键 | 动作 |
 |---|---|
-| `↑` / `↓` | 移动光标 |
-| `n` | 新建任务 — 底部弹出文本输入框 |
+| `j` / `k` | 在任务之间切换 |
+| `↑` / `↓` | 将当前任务上移/下移（调整排序） |
+| `Enter` / `e` | 打开 vim 编辑任务内容 |
+| `n` | 新建任务并立即打开 vim 编辑 |
 | `space` | 切换完成/未完成 |
-| `e` | 编辑任务文本 — 底部弹出预填内容的输入框 |
 | `d` | 删除任务（无需确认） |
 | `s` | 发送给 session |
 | `q` / `Escape` | 返回主屏 |
 
-### 新建/编辑输入框
+### 新建/编辑（vim popup）
 
-复用 dialog-rename 的模式：底部渲染单行文本输入框，`Enter` 确认，`Escape` 取消。新建时自动生成 nanoid 作为 id，记录当前时间戳。
+任务内容为多行文本，通过 `tmux display-popup` 在浮层中打开 vim 编辑，复用现有 scratchpad 机制：
+
+1. 将任务文本写入临时文件（`/tmp/av-task-<id>.txt`）
+2. 执行 `tmux -L agent-view display-popup -w 80% -h 80% -E "vim /tmp/av-task-<id>.txt"`
+3. 用户在 vim 里编辑，`:wq` 保存退出，popup 自动关闭
+4. 读回文件内容，更新 SQLite，删除临时文件
+
+新建任务时：先生成 id 和时间戳，临时文件内容为空，vim 退出后若文件非空则保存，为空则放弃。TUI 在 popup 下继续运行，无需暂停/恢复渲染。
 
 ### 发送给 Session（`s` 键）
 
@@ -129,7 +137,7 @@ d4e5f6    [x]   更新 gradio inference 服务版本
 | `src/core/types.ts` | 新增 `Task` interface |
 | `src/core/storage.ts` | 新增 `tasks` 表、CRUD 方法、schema v3 迁移 |
 | `src/tui/routes/tasks.tsx` | 新建任务看板页面 |
-| `src/tui/component/dialog-task-input.tsx` | 新建/编辑任务的文本输入组件 |
+| `src/core/task-editor.ts` | vim popup 编辑任务的工具函数 |
 | `src/tui/routes/home.tsx` | 注册 `t` 键跳转任务看板 |
 | `src/tui/routes/index.ts` | 注册 tasks 路由 |
 | `src/cli/task.ts` | `av task` 子命令 |
@@ -143,4 +151,4 @@ d4e5f6    [x]   更新 gradio inference 服务版本
 - 按项目区分的任务列表（任务是全局的）
 - 记录任务发给了哪个 session
 - session 完成后自动标记任务为完成
-- 拖拽排序（如有需要后续可加键盘排序）
+- 拖拽排序（键盘排序已通过 `↑`/`↓` 支持）
