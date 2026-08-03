@@ -9,6 +9,7 @@ import { createSimpleContext } from "./helper"
 export type RouteData =
   | { type: "home" }
   | { type: "session"; sessionId: string }
+  | { type: "tasks" }
 
 export const { use: useRoute, provider: RouteProvider } = createSimpleContext({
   name: "Route",

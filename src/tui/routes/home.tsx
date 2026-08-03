@@ -25,6 +25,7 @@ import { getSessionManager } from "@/core/session"
 import { getSshManager } from "@/core/ssh"
 import { executeShortcut, getShortcutGroupPath } from "@/core/shortcut"
 import { useKeybind } from "@tui/context/keybind"
+import { useRoute } from "@tui/context/route"
 import { useKV } from "@tui/context/kv"
 import { DialogUpdate } from "@tui/component/dialog-update"
 import { capturePane, wasCommandPaletteRequested, sendKeys } from "@/core/tmux"
@@ -93,6 +94,7 @@ export function Home() {
   const renderer = useRenderer()
   const command = useCommandDialog()
   const keybind = useKeybind()
+  const route = useRoute()
   const kv = useKV()
 
   const shortcuts = createMemo(() => getShortcuts())
@@ -761,6 +763,12 @@ export function Home() {
     // c to open settings dialog
     if (evt.name === "c" && !evt.shift && !evt.ctrl) {
       dialog.push(() => <DialogSettings />)
+      return
+    }
+
+    // t to open task board
+    if (evt.name === "t" && !evt.shift && !evt.ctrl) {
+      route.navigate({ type: "tasks" })
       return
     }
 

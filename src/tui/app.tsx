@@ -28,6 +28,7 @@ import { DialogUpdate } from "@tui/component/dialog-update"
 import { checkForUpdate } from "@/core/updater"
 import { Home } from "@tui/routes/home"
 import { Session } from "@tui/routes/session"
+import { Tasks } from "@tui/routes/tasks"
 import { getStorage, setStorage, Storage } from "@/core/storage"
 import { isTmuxAvailable } from "@/core/tmux"
 
@@ -297,6 +298,9 @@ function App(props: { onExit: () => Promise<void>; onRendererReady: (r: CliRende
         </Match>
         <Match when={route.data.type === "session"}>
           <Session />
+        </Match>
+        <Match when={route.data.type === "tasks"}>
+          <Tasks />
         </Match>
       </Switch>
     </box>
