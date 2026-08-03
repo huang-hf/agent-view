@@ -46,12 +46,15 @@ import { startHomePreviewLoop } from "@tui/util/preview"
 import {
   flattenGroupTree,
   prependCurrentGroup,
+  prependTasksEntry,
   ensureDefaultGroup,
   getGroupSessionCount,
   getGroupStatusSummary,
   DEFAULT_GROUP_PATH,
+  TASKS_ENTRY_PATH,
   type GroupedItem
 } from "@tui/util/groups"
+import { getStorage } from "@/core/storage"
 import { debugLog } from "@/core/debug-log"
 
 function log(...args: unknown[]) {
@@ -177,10 +180,16 @@ export function Home() {
   const allSessions = createMemo(() => sync.session.list())
   const currentSessions = createMemo(() => currentSessionSnapshots())
 
+  const taskCounts = createMemo(() => {
+    const tasks = getStorage().loadTasks()
+    return { total: tasks.length, done: tasks.filter(t => t.done).length }
+  })
+
   const groupedItems = createMemo(() => {
     const groups = ensureDefaultGroup(sync.group.list())
     const realGroupedItems = flattenGroupTree(allSessions(), groups)
-    return prependCurrentGroup(realGroupedItems, currentSessions(), currentExpanded())
+    const withCurrent = prependCurrentGroup(realGroupedItems, currentSessions(), currentExpanded())
+    return prependTasksEntry(withCurrent)
   })
 
   function sameIds(a: string[], b: string[]): boolean {
@@ -559,7 +568,9 @@ export function Home() {
     // Right arrow: expand group (or attach to session)
     if (evt.name === "right" || evt.name === "l") {
       const item = selectedItem()
-      if (item?.type === "group" && item.virtualType === "current" && !currentExpanded()) {
+      if (item?.type === "group" && item.virtualType === "tasks") {
+        route.navigate({ type: "tasks" })
+      } else if (item?.type === "group" && item.virtualType === "current" && !currentExpanded()) {
         setCurrentExpanded(true)
       } else if (item?.type === "group" && item.group && !item.group.expanded) {
         sync.group.toggle(item.group.path)
@@ -591,7 +602,9 @@ export function Home() {
     // Enter: attach to session OR toggle group expand/collapse
     if (evt.name === "return") {
       const item = selectedItem()
-      if (item?.type === "session" && item.session) {
+      if (item?.type === "group" && item.virtualType === "tasks") {
+        route.navigate({ type: "tasks" })
+      } else if (item?.type === "session" && item.session) {
         handleAttach(item.session, item)
       } else if (item?.type === "group" && item.virtualType === "current") {
         setCurrentExpanded(!currentExpanded())
@@ -823,7 +836,9 @@ export function Home() {
         onMouseUp={() => {
           setInputMode("mouse")
           setSelectedIndex(props.index)
-          if (props.item.virtualType === "current") {
+          if (props.item.virtualType === "tasks") {
+            route.navigate({ type: "tasks" })
+          } else if (props.item.virtualType === "current") {
             setCurrentExpanded(!currentExpanded())
           } else {
             sync.group.toggle(group().path)
@@ -833,9 +848,9 @@ export function Home() {
           if (inputMode() === "mouse") setSelectedIndex(props.index)
         }}
       >
-        {/* Expand/collapse arrow */}
+        {/* Icon / arrow */}
         <text fg={isSelected() ? theme.selectedListItemText : theme.accent}>
-          {group().expanded ? "\u25BC" : "\u25B6"}
+          {props.item.virtualType === "tasks" ? "\u2630" : group().expanded ? "\u25BC" : "\u25B6"}
         </text>
         <text> </text>
 
@@ -850,17 +865,26 @@ export function Home() {
         {/* Spacer */}
         <text flexGrow={1}> </text>
 
-        {/* Status indicators */}
-        <Show when={statusSummary().running > 0}>
-          <text fg={isSelected() ? theme.selectedListItemText : theme.success}>
-            {STATUS_ICONS.running}{statusSummary().running}
+        {/* Tasks: show done/total count */}
+        <Show when={props.item.virtualType === "tasks"}>
+          <text fg={isSelected() ? theme.selectedListItemText : theme.border}>
+            {`${taskCounts().done}/${taskCounts().total}`}
           </text>
-          <text> </text>
         </Show>
-        <Show when={statusSummary().waiting > 0}>
-          <text fg={isSelected() ? theme.selectedListItemText : theme.warning}>
-            {STATUS_ICONS.waiting}{statusSummary().waiting}
-          </text>
+
+        {/* Regular groups: status indicators */}
+        <Show when={props.item.virtualType !== "tasks"}>
+          <Show when={statusSummary().running > 0}>
+            <text fg={isSelected() ? theme.selectedListItemText : theme.success}>
+              {STATUS_ICONS.running}{statusSummary().running}
+            </text>
+            <text> </text>
+          </Show>
+          <Show when={statusSummary().waiting > 0}>
+            <text fg={isSelected() ? theme.selectedListItemText : theme.warning}>
+              {STATUS_ICONS.waiting}{statusSummary().waiting}
+            </text>
+          </Show>
         </Show>
       </box>
     )

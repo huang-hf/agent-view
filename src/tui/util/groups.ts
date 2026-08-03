@@ -12,7 +12,7 @@ export interface GroupedItem {
   isLast: boolean
   groupIndex?: number  // 1-9 for hotkey jumps
   isVirtual?: boolean
-  virtualType?: "current"
+  virtualType?: "current" | "tasks"
   isCurrent?: boolean
 }
 
@@ -20,6 +20,8 @@ export const DEFAULT_GROUP_PATH = "my-sessions"
 export const DEFAULT_GROUP_NAME = "My Sessions"
 export const CURRENT_GROUP_PATH = "__current__"
 export const CURRENT_GROUP_NAME = "Current"
+export const TASKS_ENTRY_PATH = "__tasks__"
+export const TASKS_ENTRY_NAME = "Tasks"
 
 export function ensureDefaultGroup(groups: Group[]): Group[] {
   const hasDefault = groups.some(g => g.path === DEFAULT_GROUP_PATH)
@@ -166,6 +168,25 @@ export function prependCurrentGroup(
   }
 
   return [...currentItems, ...groupedItems]
+}
+
+export function prependTasksEntry(groupedItems: GroupedItem[]): GroupedItem[] {
+  const tasksGroup: Group = {
+    path: TASKS_ENTRY_PATH,
+    name: TASKS_ENTRY_NAME,
+    expanded: false,
+    order: -2,
+    defaultPath: ""
+  }
+  const entry: GroupedItem = {
+    type: "group",
+    group: tasksGroup,
+    groupPath: TASKS_ENTRY_PATH,
+    isLast: false,
+    isVirtual: true,
+    virtualType: "tasks"
+  }
+  return [entry, ...groupedItems]
 }
 
 export function getGroupSessionCount(sessions: Session[], groupPath: string): number {
