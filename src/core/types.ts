@@ -132,6 +132,14 @@ export interface Config {
   recents?: Recent[]
 }
 
+export interface Task {
+  id: string
+  text: string
+  done: boolean
+  createdAt: Date
+  order: number
+}
+
 export function isRemoteSession(session: Session): session is RemoteSession {
   return "remoteName" in session && "remoteHost" in session
 }

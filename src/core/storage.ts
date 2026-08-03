@@ -8,14 +8,14 @@ import { Database } from "bun:sqlite"
 import path from "path"
 import os from "os"
 import fs from "fs"
-import type { Session, Group, StatusUpdate, Tool, SessionStatus } from "./types"
+import type { Session, Group, StatusUpdate, Tool, SessionStatus, Task } from "./types"
 
 function normalizeSessionStatus(status: string): SessionStatus {
   if (status === "error") return "idle"
   return status as SessionStatus
 }
 
-const SCHEMA_VERSION = 2
+const SCHEMA_VERSION = 3
 
 export interface StorageOptions {
   dbPath?: string
@@ -96,6 +96,16 @@ export class Storage {
         started INTEGER NOT NULL,
         heartbeat INTEGER NOT NULL,
         is_primary INTEGER NOT NULL DEFAULT 0
+      )
+    `)
+
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS tasks (
+        id TEXT PRIMARY KEY,
+        text TEXT NOT NULL,
+        done INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        sort_order INTEGER NOT NULL DEFAULT 0
       )
     `)
 
@@ -448,6 +458,42 @@ export class Storage {
   resignPrimary(): void {
     const stmt = this.db.prepare("UPDATE heartbeats SET is_primary = 0 WHERE pid = ?")
     stmt.run(this.pid)
+  }
+
+  // Task CRUD
+
+  loadTasks(): Task[] {
+    if (this.closed) return []
+    const stmt = this.db.prepare(
+      "SELECT id, text, done, created_at, sort_order FROM tasks ORDER BY sort_order, created_at"
+    )
+    const rows = stmt.all() as any[]
+    return rows.map(row => ({
+      id: row.id,
+      text: row.text,
+      done: row.done === 1,
+      createdAt: new Date(row.created_at),
+      order: row.sort_order,
+    }))
+  }
+
+  saveTask(task: Task): void {
+    if (this.closed) return
+    const stmt = this.db.prepare(`
+      INSERT OR REPLACE INTO tasks (id, text, done, created_at, sort_order)
+      VALUES (?, ?, ?, ?, ?)
+    `)
+    stmt.run(task.id, task.text, task.done ? 1 : 0, task.createdAt.getTime(), task.order)
+  }
+
+  deleteTask(id: string): void {
+    const stmt = this.db.prepare("DELETE FROM tasks WHERE id = ?")
+    stmt.run(id)
+  }
+
+  updateTaskField(id: string, field: "text" | "done" | "sort_order", value: unknown): void {
+    const stmt = this.db.prepare(`UPDATE tasks SET ${field} = ? WHERE id = ?`)
+    stmt.run(value as string | number, id)
   }
 
   // Metadata
