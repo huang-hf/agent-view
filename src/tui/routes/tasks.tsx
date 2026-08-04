@@ -255,11 +255,14 @@ export function Tasks() {
       </For>
 
       {/* Footer */}
-      <text x={0} y={h() - 2}>
+      <text x={0} y={h() - 3}>
         {"─".repeat(w())}
       </text>
+      <text x={1} y={h() - 2}>
+        {"j/k:移动  ↑/↓:排序  n:新建  Enter/e:编辑  space:完成/未完成"}
+      </text>
       <text x={1} y={h() - 1}>
-        {"n:新建  Enter:编辑  space:完成  s:发送  d:删除  q:返回  ?:帮助"}
+        {"s:发送给session  d:删除  q:返回主屏  ?:帮助"}
       </text>
     </box>
   )
