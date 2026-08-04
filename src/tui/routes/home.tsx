@@ -850,9 +850,8 @@ export function Home() {
       >
         {/* Icon / arrow */}
         <text fg={isSelected() ? theme.selectedListItemText : theme.accent}>
-          {props.item.virtualType === "tasks" ? "\u2630" : group().expanded ? "\u25BC" : "\u25B6"}
+          {props.item.virtualType === "tasks" ? "\u2630 " : group().expanded ? "\u25BC " : "\u25B6 "}
         </text>
-        <text> </text>
 
         {/* Group name */}
         <text
