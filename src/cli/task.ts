@@ -19,6 +19,7 @@ export async function cmdTaskAdd(text: string): Promise<void> {
     done: false,
     createdAt: new Date(),
     order: maxOrder + 1,
+    completedAt: null,
   }
   storage.saveTask(task)
   console.log(task.id)
@@ -41,7 +42,7 @@ export async function cmdTaskList(): Promise<void> {
 
 export async function cmdTaskDone(id: string): Promise<void> {
   const storage = getStorage()
-  storage.updateTaskField(id, "done", 1)
+  storage.setTaskDone(id, true)
   console.log(`Task ${id} marked done.`)
 }
 

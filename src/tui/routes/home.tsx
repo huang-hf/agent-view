@@ -848,9 +848,11 @@ export function Home() {
           if (inputMode() === "mouse") setSelectedIndex(props.index)
         }}
       >
-        {/* Icon / arrow */}
+        {/* Icon / arrow \u2014 use Geometric-Shapes glyphs (width-1 in OpenTUI's width
+            table); avoid wide/ambiguous glyphs like \u2630 (U+2630) which misalign the
+            row background. */}
         <text fg={isSelected() ? theme.selectedListItemText : theme.accent}>
-          {props.item.virtualType === "tasks" ? "\u2630 " : group().expanded ? "\u25BC " : "\u25B6 "}
+          {props.item.virtualType === "tasks" ? "\u25A4 " : group().expanded ? "\u25BC " : "\u25B6 "}
         </text>
 
         {/* Group name */}

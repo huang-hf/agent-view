@@ -116,6 +116,13 @@ export class Storage {
       // Column already exists — safe to ignore
     }
 
+    // Migration: add tasks.completed_at (schema v3) — nullable completion timestamp
+    try {
+      this.db.exec("ALTER TABLE tasks ADD COLUMN completed_at INTEGER")
+    } catch {
+      // Column already exists — safe to ignore
+    }
+
     // Set schema version
     const setVersion = this.db.prepare(
       "INSERT OR REPLACE INTO metadata (key, value) VALUES ('schema_version', ?)"
@@ -465,7 +472,7 @@ export class Storage {
   loadTasks(): Task[] {
     if (this.closed) return []
     const stmt = this.db.prepare(
-      "SELECT id, text, done, created_at, sort_order FROM tasks ORDER BY sort_order, created_at"
+      "SELECT id, text, done, created_at, sort_order, completed_at FROM tasks ORDER BY sort_order, created_at"
     )
     const rows = stmt.all() as any[]
     return rows.map(row => ({
@@ -474,16 +481,24 @@ export class Storage {
       done: row.done === 1,
       createdAt: new Date(row.created_at),
       order: row.sort_order,
+      completedAt: row.completed_at != null ? new Date(row.completed_at) : null,
     }))
   }
 
   saveTask(task: Task): void {
     if (this.closed) return
     const stmt = this.db.prepare(`
-      INSERT OR REPLACE INTO tasks (id, text, done, created_at, sort_order)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT OR REPLACE INTO tasks (id, text, done, created_at, sort_order, completed_at)
+      VALUES (?, ?, ?, ?, ?, ?)
     `)
-    stmt.run(task.id, task.text, task.done ? 1 : 0, task.createdAt.getTime(), task.order)
+    stmt.run(
+      task.id,
+      task.text,
+      task.done ? 1 : 0,
+      task.createdAt.getTime(),
+      task.order,
+      task.completedAt ? task.completedAt.getTime() : null,
+    )
   }
 
   deleteTask(id: string): void {
@@ -494,6 +509,15 @@ export class Storage {
   updateTaskField(id: string, field: "text" | "done" | "sort_order", value: unknown): void {
     const stmt = this.db.prepare(`UPDATE tasks SET ${field} = ? WHERE id = ?`)
     stmt.run(value as string | number, id)
+  }
+
+  /**
+   * Toggle a task's done state, stamping completed_at when marking done and
+   * clearing it when reopening. Keeps the done column ordered by recency.
+   */
+  setTaskDone(id: string, done: boolean): void {
+    const stmt = this.db.prepare("UPDATE tasks SET done = ?, completed_at = ? WHERE id = ?")
+    stmt.run(done ? 1 : 0, done ? Date.now() : null, id)
   }
 
   // Metadata

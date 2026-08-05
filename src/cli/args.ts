@@ -65,7 +65,7 @@ export function parseArgs(argv: string[]): CLICommand {
     return { type: "tui", mode: "dark" }
   }
 
-  if (getFlag(args, "--help") || getFlag(args, "-h")) {
+  if (getFlag(args, "--help") || getFlag(args, "-h") || args[0] === "help") {
     return { type: "help" }
   }
 
@@ -333,6 +333,7 @@ Usage:
   av --hibernate <id>             Hibernate a session (Claude-only)
   av --wake <id>                  Resume a hibernated session
   av --auto-hibernate [minutes]   Set/show auto-hibernate timeout (0 to disable)
+  av task <subcommand>            Manage the task board (see Tasks below)
 
 TUI Options:
   --light                         Use light mode theme
@@ -364,6 +365,12 @@ List Sessions (--list, -l):
 Delete Session (--delete):
   --worktree                      Also delete the git worktree
   --force, -f                     Skip confirmation prompt
+
+Tasks (task board, shared with the TUI Tasks screen):
+  av task add <text>              Add a task; prints the new task id
+  av task list                    List all tasks (id / status / text)
+  av task done <id>               Mark a task as done
+  av task edit <id> <text>        Replace a task's text
 
 General:
   --lines <count>                 Used with --output (default: 200)

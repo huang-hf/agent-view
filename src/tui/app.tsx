@@ -254,6 +254,10 @@ function App(props: { onExit: () => Promise<void>; onRendererReady: (r: CliRende
       command.open()
     }
 
+    // Single-letter shortcuts below are home-screen only. On other routes
+    // (tasks, session) those screens own the keys (e.g. q = back, not quit av).
+    if (route.data.type !== "home") return
+
     if (evt.name === "n") {
       evt.preventDefault()
       log("Opening new dialog from App")

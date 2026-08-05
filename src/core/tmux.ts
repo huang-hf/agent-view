@@ -405,13 +405,15 @@ export async function renameWindow(sessionName: string, windowTitle: string): Pr
   }
 }
 
-export async function sendKeys(name: string, keys: string): Promise<void> {
+export async function sendKeys(name: string, keys: string, enter = true): Promise<void> {
   // Use execFile + tmuxSpawnArgs (argument array) to prevent shell injection —
   // values are passed directly to the process, never interpreted by a shell.
   if (keys) {
     await execFileAsync("tmux", tmuxSpawnArgs("send-keys", "-t", name, "-l", keys))
   }
-  await execFileAsync("tmux", tmuxSpawnArgs("send-keys", "-t", name, "Enter"))
+  if (enter) {
+    await execFileAsync("tmux", tmuxSpawnArgs("send-keys", "-t", name, "Enter"))
+  }
 }
 
 /**

@@ -138,6 +138,8 @@ export interface Task {
   done: boolean
   createdAt: Date
   order: number
+  /** When the task was last marked done; null while active. Newest-first in the done column. */
+  completedAt: Date | null
 }
 
 export function isRemoteSession(session: Session): session is RemoteSession {

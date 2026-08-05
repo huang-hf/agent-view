@@ -811,7 +811,8 @@ export class SessionManager {
     storage.touch()
   }
 
-  async sendMessage(sessionId: string, message: string): Promise<void> {
+  async sendMessage(sessionId: string, message: string, opts?: { enter?: boolean }): Promise<void> {
+    const enter = opts?.enter ?? true
     const storage = getStorage()
     const session = storage.getSession(sessionId)
 
@@ -831,12 +832,12 @@ export class SessionManager {
       const executor = this.getExecutor(session.remoteHost)
       const args = ["send-keys", "-t", session.tmuxSession]
       if (message) args.push("-l", message)
-      args.push("Enter")
+      if (enter) args.push("Enter")
       log("sendMessage: exec args=", args)
       await executor.exec(args)
       log("sendMessage: exec done")
     } else {
-      await tmux.sendKeys(session.tmuxSession, message)
+      await tmux.sendKeys(session.tmuxSession, message, enter)
     }
     storage.updateSessionField(sessionId, "last_accessed", Date.now())
   }

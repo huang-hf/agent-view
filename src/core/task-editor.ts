@@ -1,25 +1,22 @@
 /**
- * Opens a vim popup for editing task text via tmux display-popup.
- * Reuses the same mechanism as the scratchpad feature.
+ * Opens the user's editor ($EDITOR, vim, nano, vi) for editing task text.
+ *
+ * Runs the editor directly in the current terminal with inherited stdio, so it
+ * works whether or not av is attached to a tmux session. The caller MUST
+ * suspend the OpenTUI renderer around this call (renderer.suspend()/resume())
+ * so the editor gets exclusive control of the terminal.
  */
 
 import fs from "fs"
 import os from "os"
 import path from "path"
-import { execFile } from "child_process"
-import { promisify } from "util"
+import { spawnSync } from "child_process"
 import { resolveScratchpadEditor } from "./scratchpad"
 
-const execFileAsync = promisify(execFile)
-const TMUX_SOCKET = "agent-view"
-
 /**
- * Opens the user's editor ($EDITOR, vim, nano, vi) in a tmux display-popup
- * for editing the given text. Returns the saved content, or null if the user
- * quit without saving (file was empty or unchanged from empty).
- *
- * The caller is responsible for deciding what to do with null (discard new
- * task, keep old text for edits, etc.).
+ * Opens the editor on a temp file seeded with initialText and returns the saved
+ * content, or null if the result is empty. The caller decides what to do with
+ * null (discard new task, keep old text for edits, etc.).
  */
 export async function openTaskEditor(taskId: string, initialText: string): Promise<string | null> {
   const editor = resolveScratchpadEditor()
@@ -32,14 +29,10 @@ export async function openTaskEditor(taskId: string, initialText: string): Promi
   try {
     fs.writeFileSync(tmpPath, initialText, { mode: 0o600 })
 
-    await execFileAsync("tmux", [
-      "-L", TMUX_SOCKET,
-      "display-popup",
-      "-w", "80%",
-      "-h", "80%",
-      "-E",
-      `${editor} ${tmpPath}`,
-    ])
+    const result = spawnSync(editor, [tmpPath], { stdio: "inherit" })
+    if (result.error) {
+      throw result.error
+    }
 
     const content = fs.readFileSync(tmpPath, "utf-8")
     return content.trim() === "" ? null : content
