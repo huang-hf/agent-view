@@ -41,6 +41,7 @@ When working with AI coding agents, you often need to run multiple agents on dif
 - **Tool Agnostic** - Works as a Claude Code manager, Gemini CLI orchestrator, OpenCode dashboard, or with any custom AI tool
 - **Keyboard-First** - Fully navigable terminal UI with keyboard shortcuts for maximum productivity
 - **Session Groups** - Organize sessions into groups by project or workflow
+- **Task Board** - A built-in kanban (待办 / 已完成) to jot down what each agent should do next. Completed tasks group into a date timeline (今日 / 昨日 / MMDD), and you can push a task straight into a running session. Fully scriptable via `av task` so an agent can queue its own follow-ups
 - **Persistent State** - Sessions survive terminal restarts and system reboots via tmux
 
 ### Status Detection
@@ -161,6 +162,39 @@ tailscale serve status
 3. Enter the project path
 4. Optionally enable git worktree for an isolated branch
 5. Press `Enter` to create and attach
+
+### Task Board
+
+A lightweight kanban shared with the whole app. Open it from the **Tasks** entry at the top of the dashboard list (`Enter`). Tasks are stored in SQLite (`~/.agent-view`), so the TUI and the `av task` CLI see the same list.
+
+- **Two columns** – `待办` (active) on the left, `已完成` (done) on the right.
+- **Done timeline** – completed tasks group by completion day, newest first: `今日` / `昨日` / `MMDD` / `YYYY/MMDD`.
+- **Send to a session** – press `s` on a task to type it into a running session (without pressing Enter) and jump straight into that session.
+- **Vim editing** – `n` / `Enter` open your `$EDITOR` for multi-line task text.
+
+Task board shortcuts:
+
+| Key | Action |
+|-----|--------|
+| `j` / `k` | Move cursor within the focused column |
+| `h` / `l` (or `←` / `→`) | Switch between 待办 / 已完成 |
+| `↑` / `↓` | Reorder (待办 only) |
+| `n` | New task (opens `$EDITOR`) |
+| `Enter` / `e` | Edit the selected task |
+| `Space` | Toggle done (moves it between columns) |
+| `s` | Send to a session and attach |
+| `d` | Delete task |
+| `q` / `Esc` | Back to dashboard |
+| `?` | Show task board help |
+
+Manage tasks from the CLI (handy for letting an agent queue its own work):
+
+```bash
+av task add "fix the login 500"   # add a task, prints its id
+av task list                      # list all tasks (id / status / text)
+av task done <id>                 # mark a task done
+av task edit <id> "new text"      # replace a task's text
+```
 
 ### Remote SSH Sessions
 
