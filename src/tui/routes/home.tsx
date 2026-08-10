@@ -30,7 +30,7 @@ import { useKV } from "@tui/context/kv"
 import { DialogUpdate } from "@tui/component/dialog-update"
 import { capturePane, wasCommandPaletteRequested, sendKeys } from "@/core/tmux"
 import { useCommandDialog } from "@tui/component/dialog-command"
-import type { Session, Group } from "@/core/types"
+import type { Session, Group, Task } from "@/core/types"
 import { formatRelativeTime, truncatePath } from "@tui/util/locale"
 import { STATUS_ICONS } from "@tui/util/status"
 import {
@@ -55,6 +55,7 @@ import {
   type GroupedItem
 } from "@tui/util/groups"
 import { getStorage } from "@/core/storage"
+import { TaskBoardView } from "@tui/component/task-board"
 import { debugLog } from "@/core/debug-log"
 
 function log(...args: unknown[]) {
@@ -115,6 +116,13 @@ export function Home() {
     }
   }, 1000)
   onCleanup(() => clearInterval(autoHibernateInterval))
+
+  // Live-ish task snapshot for the right-pane preview of the Tasks entry.
+  const [previewTasks, setPreviewTasks] = createSignal<Task[]>(getStorage().loadTasks())
+  const tasksPreviewInterval = setInterval(() => {
+    setPreviewTasks(getStorage().loadTasks())
+  }, 1500)
+  onCleanup(() => clearInterval(tasksPreviewInterval))
 
   const [selectedIndex, setSelectedIndex] = createSignal(0)
   const [inputMode, setInputMode] = createSignal<"keyboard" | "mouse">("keyboard")
@@ -267,6 +275,12 @@ export function Home() {
   const selectedGroup = createMemo(() => {
     const item = selectedItem()
     return item?.type === "group" && !item.isVirtual ? item.group : undefined
+  })
+
+  // True when the ▤ Tasks entry is highlighted — the right pane previews the board.
+  const tasksSelected = createMemo(() => {
+    const item = selectedItem()
+    return item?.type === "group" && item.virtualType === "tasks"
   })
 
   const move = createListNavigation(
@@ -1189,6 +1203,19 @@ export function Home() {
 
               {/* Preview content */}
               <Show
+                when={!tasksSelected()}
+                fallback={
+                  <box flexDirection="column" flexGrow={1}>
+                    <TaskBoardView
+                      tasks={previewTasks()}
+                      column={0}
+                      row={0}
+                      width={rightWidth()}
+                    />
+                  </box>
+                }
+              >
+              <Show
                 when={selectedSession()}
                 fallback={<PreviewLogo />}
               >
@@ -1217,6 +1244,7 @@ export function Home() {
                     </Show>
                   </scrollbox>
                 </box>
+              </Show>
               </Show>
             </box>
           </Show>

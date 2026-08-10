@@ -4,7 +4,7 @@
  * Enter/e: edit (vim), n: new, space: toggle done, d: delete, s: send to session, q: back
  */
 
-import { createSignal, createMemo, For, Show } from "solid-js"
+import { createSignal, createMemo } from "solid-js"
 import { useKeyboard, useTerminalDimensions, useRenderer } from "@opentui/solid"
 import { useRoute } from "@tui/context/route"
 import { useTheme } from "@tui/context/theme"
@@ -12,10 +12,11 @@ import { useSync } from "@tui/context/sync"
 import { useToast } from "@tui/ui/toast"
 import { useDialog } from "@tui/ui/dialog"
 import { DialogSelect } from "@tui/ui/dialog-select"
+import { TaskBoardView } from "@tui/component/task-board"
 import { getStorage } from "@/core/storage"
 import { openTaskEditor } from "@/core/task-editor"
 import { getSessionManager } from "@/core/session"
-import { dayLabel } from "@/core/day-label"
+import { activeTasks as calcActive, doneTasks as calcDone } from "@/core/task-view"
 import type { Task } from "@/core/types"
 
 function generateId(): string {
@@ -51,34 +52,11 @@ export function Tasks() {
     setTasks(storage.loadTasks())
   }
 
-  // 待办: active tasks in their manual sort order (loadTasks is already sorted).
-  const activeTasks = createMemo(() => tasks().filter(t => !t.done))
-  // 已完成: done tasks, most-recently-completed first.
-  const doneTasks = createMemo(() =>
-    tasks()
-      .filter(t => t.done)
-      .sort((a, b) => {
-        const ta = a.completedAt?.getTime() ?? a.createdAt.getTime()
-        const tb = b.completedAt?.getTime() ?? b.createdAt.getTime()
-        return tb - ta
-      })
-  )
+  // Column derivations (shared with the read-only home preview so row indices
+  // line up). See src/core/task-view.ts.
+  const activeTasks = createMemo(() => calcActive(tasks()))
+  const doneTasks = createMemo(() => calcDone(tasks()))
   const doneCount = createMemo(() => doneTasks().length)
-
-  // Group the (already newest-first) done tasks into contiguous day buckets.
-  // Each item keeps its flat index into doneTasks() so selection still tracks
-  // "the Nth done task" regardless of the injected date headers.
-  const doneGroups = createMemo(() => {
-    const now = new Date()
-    const groups: { label: string; items: { task: Task; idx: number }[] }[] = []
-    doneTasks().forEach((task, idx) => {
-      const label = dayLabel(task.completedAt ?? task.createdAt, now)
-      const last = groups[groups.length - 1]
-      if (last && last.label === label) last.items.push({ task, idx })
-      else groups.push({ label, items: [{ task, idx }] })
-    })
-    return groups
-  })
 
   const currentList = createMemo(() => (column() === 0 ? activeTasks() : doneTasks()))
   const selectedTask = createMemo<Task | undefined>(() => currentList()[row()])
@@ -205,21 +183,6 @@ export function Tasks() {
     evt.preventDefault()
   }
 
-  // Column geometry: content area minus a 3-cell separator ("  │"), split evenly.
-  const colWidth = createMemo(() => {
-    const inner = dimensions().width - 2 // content paddingLeft/Right
-    return Math.max(6, Math.floor((inner - 3) / 2))
-  })
-  // Width available for the task text, after the marker + checkbox prefix.
-  const textWidth = createMemo(() => Math.max(1, colWidth() - 7))
-
-  // First line only, truncated with an ellipsis so long tasks never wrap.
-  function fit(text: string): string {
-    const line = text.split("\n")[0]
-    const max = textWidth()
-    return line.length > max ? line.slice(0, Math.max(0, max - 1)) + "…" : line
-  }
-
   useKeyboard((evt) => {
     if (dialog.stack.length > 0) return
 
@@ -322,65 +285,13 @@ export function Tasks() {
         </text>
       </box>
 
-      {/* Two-column board: 待办 | 已完成 */}
-      <box flexDirection="row" flexGrow={1} paddingLeft={1} paddingRight={1} paddingTop={1}>
-        {/* 待办 column */}
-        <box flexDirection="column" width={colWidth()} flexShrink={0}>
-          <text fg={column() === 0 ? theme.primary : theme.textMuted} bold>
-            {`待办 (${activeTasks().length})`}
-          </text>
-          <Show
-            when={activeTasks().length > 0}
-            fallback={<text fg={theme.textMuted}>{"  （空）"}</text>}
-          >
-            <For each={activeTasks()}>
-              {(task, i) => {
-                const isSelected = () => column() === 0 && i() === row()
-                return (
-                  <text fg={isSelected() ? theme.primary : theme.text} bold={isSelected()}>
-                    {`${isSelected() ? "►" : " "} [ ] ${fit(task.text)}`}
-                  </text>
-                )
-              }}
-            </For>
-          </Show>
-        </box>
-
-        {/* Separator */}
-        <box width={3} flexShrink={0} alignItems="center">
-          <text fg={theme.border}>{"│"}</text>
-        </box>
-
-        {/* 已完成 column — grouped by completion day */}
-        <box flexDirection="column" flexGrow={1}>
-          <text fg={column() === 1 ? theme.primary : theme.textMuted} bold>
-            {`已完成 (${doneTasks().length})`}
-          </text>
-          <Show
-            when={doneTasks().length > 0}
-            fallback={<text fg={theme.textMuted}>{"  （空）"}</text>}
-          >
-            <For each={doneGroups()}>
-              {(group) => (
-                <box flexDirection="column">
-                  {/* Date header — not selectable */}
-                  <text fg={theme.textMuted} bold>{` ${group.label}`}</text>
-                  <For each={group.items}>
-                    {(item) => {
-                      const isSelected = () => column() === 1 && item.idx === row()
-                      return (
-                        <text fg={isSelected() ? theme.primary : theme.textMuted} bold={isSelected()} dim>
-                          {`${isSelected() ? " ►" : "  "} [x] ${fit(item.task.text)}`}
-                        </text>
-                      )
-                    }}
-                  </For>
-                </box>
-              )}
-            </For>
-          </Show>
-        </box>
-      </box>
+      {/* Two-column board + detail panel (shared with the home preview) */}
+      <TaskBoardView
+        tasks={tasks()}
+        column={column()}
+        row={row()}
+        width={dimensions().width}
+      />
 
       {/* Footer with keybinds */}
       <box
