@@ -34,10 +34,9 @@ When working with AI coding agents, you often need to run multiple agents on dif
 
 - **Multi-Agent Dashboard** - View all your AI coding assistant sessions at a glance with real-time status indicators
 - **Smart Notifications** - Get notified when an agent finishes a task or needs your input, so you can context-switch efficiently
-- **Mobile Web UI** - Focus-first web client for phone usage with inbox, transcript paging, and remote session support
+- **Mobile Web UI** - Focus-first web client for phone usage with inbox, transcript paging, and remote access to your sessions (over Tailscale/LAN)
 - **Session Management** - Create, stop, restart, delete, and duplicate coding agent sessions with keyboard shortcuts
 - **Git Worktree Integration** - Automatically create isolated git worktrees for each agent session, keeping your branches clean. Optionally sync with the latest remote branch before creating each worktree
-- **Remote SSH Sessions** - Manage AI agent sessions on remote servers via SSH, with automatic reconnection and connection health monitoring
 - **Tool Agnostic** - Works as a Claude Code manager, Gemini CLI orchestrator, OpenCode dashboard, or with any custom AI tool
 - **Keyboard-First** - Fully navigable terminal UI with keyboard shortcuts for maximum productivity
 - **Session Groups** - Organize sessions into groups by project or workflow
@@ -114,7 +113,7 @@ Web UI highlights:
 - Paged transcript browsing with upward loading
 - Quick actions: `Confirm`, `Interrupt`, `Acknowledge`
 - Browser notifications via Service Worker
-- Unified local and remote session access
+- Unified access to all your sessions from one place
 
 If you use Tailscale, `av --web` and `av --all` can automatically try `tailscale serve --bg <port>`.
 You can verify the published HTTPS URL with:
@@ -195,29 +194,6 @@ av task list                      # list all tasks (id / status / text)
 av task done <id>                 # mark a task done
 av task edit <id> "new text"      # replace a task's text
 ```
-
-### Remote SSH Sessions
-
-Agent View can manage AI agent sessions on remote servers over SSH. Sessions run in tmux on the remote host and are monitored in real-time from your local dashboard.
-
-Add remote hosts to `~/.agent-view/config.json`:
-
-```json
-{
-  "remoteHosts": [
-    { "alias": "my-server" },
-    { "alias": "gpu-box", "label": "GPU" }
-  ]
-}
-```
-
-The `alias` must match an entry in your `~/.ssh/config`. When creating a new session, select the remote host from the host picker. Agent View will:
-- Establish a persistent SSH ControlMaster connection
-- Run tmux on the remote host using the same custom config
-- Automatically reconnect if the SSH connection drops
-- Detect connection health via SSH keepalives (auto-disconnect after 30s of silence)
-
-When attaching to a remote session, the terminal shows a brief status line before tmux renders, and a "connection lost" message if the SSH connection drops while attached.
 
 ### Git Worktree Sync
 
