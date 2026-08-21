@@ -240,7 +240,13 @@ export async function isTmuxAvailable(): Promise<boolean> {
  * Refresh the session cache
  * Call this once per tick cycle
  */
-export async function refreshSessionCache(): Promise<void> {
+/**
+ * Refresh the session cache. Returns true when the tmux listing succeeded
+ * (even with zero sessions), false when the command errored. On failure the
+ * previous cache is kept untouched so callers can preserve status instead of
+ * treating a transient tmux hiccup as "all sessions stopped".
+ */
+export async function refreshSessionCache(): Promise<boolean> {
   try {
     const { stdout } = await execAsync(
       tmuxCmd('list-windows -a -F "#{session_name}\t#{window_activity}"')
@@ -263,12 +269,25 @@ export async function refreshSessionCache(): Promise<void> {
       data: newCache,
       timestamp: Date.now()
     }
+    return true
   } catch {
-    // tmux not running or no sessions
-    sessionCache = {
-      data: new Map(),
-      timestamp: Date.now()
-    }
+    // tmux command failed (server busy/transient). Preserve the last-good cache
+    // rather than wiping it — wiping would flip every local session to stopped.
+    return false
+  }
+}
+
+/**
+ * Authoritative single-session existence check (direct `has-session`), used to
+ * confirm before marking a session stopped. `list-windows` can be partial or
+ * stale under load; this avoids that false positive.
+ */
+export async function hasSession(name: string): Promise<boolean> {
+  try {
+    await execAsync(tmuxCmd(`has-session -t "${name}"`))
+    return true
+  } catch {
+    return false
   }
 }
 

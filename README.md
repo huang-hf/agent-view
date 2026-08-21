@@ -184,7 +184,7 @@ Task board shortcuts:
 | `Space` | Toggle done (moves it between columns) |
 | `s` | Send to a session and attach |
 | `d` | Delete task |
-| `q` / `Esc` | Back to dashboard |
+| `Ctrl+Q` / `Esc` | Back to dashboard |
 | `?` | Show task board help |
 
 Manage tasks from the CLI (handy for letting an agent queue its own work):

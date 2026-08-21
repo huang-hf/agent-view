@@ -165,10 +165,13 @@ export function getConfig(): AppConfig {
 }
 
 export async function saveConfig(config: AppConfig): Promise<void> {
+  // Update the in-memory cache synchronously so getConfig() reflects the latest
+  // intent immediately (callers that don't await still see it); the disk write
+  // is just persistence.
+  cachedConfig = config
   await ensureConfigDir()
   const content = JSON.stringify(config, null, 2)
   await fs.writeFile(CONFIG_PATH, content, "utf-8")
-  cachedConfig = config
 }
 
 export function getConfigDir(): string {

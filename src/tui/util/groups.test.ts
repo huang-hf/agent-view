@@ -6,10 +6,13 @@ import {
   getGroupSessionCount,
   getGroupStatusSummary,
   generateGroupPath,
+  itemKey,
+  resolveSelection,
   CURRENT_GROUP_PATH,
   CURRENT_GROUP_NAME,
   DEFAULT_GROUP_PATH,
-  DEFAULT_GROUP_NAME
+  DEFAULT_GROUP_NAME,
+  type GroupedItem
 } from "./groups"
 import type { Session, Group } from "@/core/types"
 
@@ -234,5 +237,80 @@ describe("generateGroupPath", () => {
   test("increments number until unique", () => {
     const existing = ["test", "test-1", "test-2"]
     expect(generateGroupPath("Test", existing)).toBe("test-3")
+  })
+})
+
+// Helpers to build GroupedItem rows for selection tests.
+function sessItem(id: string, groupPath: string): GroupedItem {
+  return {
+    type: "session",
+    session: createMockSession({ id, groupPath }),
+    groupPath,
+    isLast: false,
+  }
+}
+function curSessItem(id: string): GroupedItem {
+  return {
+    type: "session",
+    session: createMockSession({ id }),
+    groupPath: CURRENT_GROUP_PATH,
+    isLast: false,
+    isVirtual: true,
+    virtualType: "current",
+    isCurrent: true,
+  }
+}
+function groupItem(path: string): GroupedItem {
+  return { type: "group", group: createMockGroup({ path }), groupPath: path, isLast: false }
+}
+const tasksItem: GroupedItem = { type: "group", groupPath: "__tasks__", isLast: false, isVirtual: true, virtualType: "tasks" }
+const currentHeaderItem: GroupedItem = { type: "group", groupPath: CURRENT_GROUP_PATH, isLast: false, isVirtual: true, virtualType: "current" }
+
+describe("itemKey", () => {
+  test("distinguishes a Current session copy from its real-group copy", () => {
+    expect(itemKey(curSessItem("A"))).toBe("cur:A")
+    expect(itemKey(sessItem("A", "g1"))).toBe("sess:g1:A")
+  })
+
+  test("keys virtual entries and group headers", () => {
+    expect(itemKey(tasksItem)).toBe("virt:tasks")
+    expect(itemKey(currentHeaderItem)).toBe("virt:current")
+    expect(itemKey(groupItem("g1"))).toBe("group:g1")
+  })
+
+  test("returns null for a missing item", () => {
+    expect(itemKey(undefined)).toBeNull()
+  })
+})
+
+describe("resolveSelection", () => {
+  test("follows the same session when a Current row above it drops out", () => {
+    // Cursor on Current session B (index 3).
+    const before = [tasksItem, currentHeaderItem, curSessItem("A"), curSessItem("B"), groupItem("g1"), sessItem("C", "g1")]
+    const key = itemKey(before[3])
+    expect(key).toBe("cur:B")
+
+    // A leaves Current (status change) → everything below shifts up.
+    const after = [tasksItem, currentHeaderItem, curSessItem("B"), groupItem("g1"), sessItem("C", "g1")]
+    const res = resolveSelection(after, key, 3)
+    expect(res.index).toBe(2) // follows B, not the group header now at index 3
+    expect(res.key).toBe("cur:B")
+  })
+
+  test("does not jump between the Current and real-group copies of one session", () => {
+    const items = [currentHeaderItem, curSessItem("X"), groupItem("g1"), sessItem("X", "g1")]
+    expect(resolveSelection(items, "cur:X", 1).index).toBe(1)
+    expect(resolveSelection(items, "sess:g1:X", 1).index).toBe(3)
+  })
+
+  test("clamps and re-keys when the selected item is gone", () => {
+    const items = [tasksItem, currentHeaderItem, curSessItem("B")]
+    const res = resolveSelection(items, "cur:GONE", 5)
+    expect(res.index).toBe(2) // clamped to last
+    expect(res.key).toBe("cur:B")
+  })
+
+  test("handles an empty list", () => {
+    expect(resolveSelection([], "cur:B", 3)).toEqual({ index: 0, key: null })
   })
 })

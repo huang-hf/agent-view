@@ -147,6 +147,7 @@ export class SessionManager {
   private _recentAutoHibernated: { id: string; title: string; idleMinutes: number }[] = []
   private localWaitingExitPolls = new Map<string, number>() // sessionId -> consecutive non-waiting polls
   private runningExitPolls = new Map<string, number>() // sessionId -> consecutive idle candidates after running
+  private localStoppedPolls = new Map<string, number>() // sessionId -> consecutive stopped candidates
 
   private stabilizeLocalWaitingStatus(
     sessionId: string,
@@ -169,6 +170,21 @@ export class SessionManager {
     const resolved = stabilizeRunningTransition(previous, candidate, currentPolls)
     if (resolved.polls > 0) this.runningExitPolls.set(sessionId, resolved.polls)
     else this.runningExitPolls.delete(sessionId)
+    return resolved.next
+  }
+
+  // Debounce "stopped" for local sessions: a stopped candidate must persist for
+  // several consecutive polls before it sticks, so a single transient detection
+  // miss doesn't flip a live session to stopped. Mirrors the remote path.
+  private stabilizeLocalStoppedStatus(
+    sessionId: string,
+    previous: SessionStatus,
+    candidate: SessionStatus
+  ): SessionStatus {
+    const currentPolls = this.localStoppedPolls.get(sessionId) || 0
+    const resolved = stabilizeRemoteStoppedTransition(previous, candidate, currentPolls)
+    if (resolved.polls > 0) this.localStoppedPolls.set(sessionId, resolved.polls)
+    else this.localStoppedPolls.delete(sessionId)
     return resolved.next
   }
 
@@ -309,13 +325,19 @@ export class SessionManager {
     const remoteSessions = sessions.filter(s => !!s.remoteHost)
 
     // --- Local sessions (existing logic) ---
-    await tmux.refreshSessionCache()
+    const listedOk = await tmux.refreshSessionCache()
 
     const config = getConfig()
     const autoHibernateMs = (config.autoHibernateMinutes || 0) * 60 * 1000
     let changed = false
 
-    for (const session of localSessions) {
+    // If the tmux listing failed this cycle, preserve all local statuses instead
+    // of flipping everything to "stopped" on a transient hiccup (mirrors remote).
+    if (!listedOk) {
+      log("refreshSessionCache failed — preserving local session statuses this cycle")
+    }
+
+    for (const session of listedOk ? localSessions : []) {
       if (!session.tmuxSession) continue
 
       // Skip hibernated sessions — they have no tmux process
@@ -323,8 +345,16 @@ export class SessionManager {
 
       const exists = tmux.sessionExists(session.tmuxSession)
       if (!exists) {
-        // Session was killed externally
-        changed = this.writeStatusIfChanged(storage, session.id, session.status, "stopped", session.tool) || changed
+        // list-windows can be partial/stale under load. Confirm with a direct
+        // has-session before proposing "stopped", then debounce so a single
+        // transient miss never flips a live session.
+        let candidate: SessionStatus = "stopped"
+        if (await tmux.hasSession(session.tmuxSession)) {
+          // Actually alive — recover from a stale "stopped", else keep as-is.
+          candidate = session.status === "stopped" ? "idle" : session.status
+        }
+        const stabilized = this.stabilizeLocalStoppedStatus(session.id, session.status, candidate)
+        changed = this.writeStatusIfChanged(storage, session.id, session.status, stabilized, session.tool) || changed
         continue
       }
 

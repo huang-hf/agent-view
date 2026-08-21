@@ -16,6 +16,42 @@ export interface GroupedItem {
   isCurrent?: boolean
 }
 
+/**
+ * Stable identity key for a grouped item, used to keep the cursor pinned to the
+ * same item when the list reflows (async status refreshes reorder/insert/remove
+ * rows). NOT just the session id: a Current session also appears in its real
+ * group, so the key must distinguish the two copies.
+ */
+export function itemKey(item: GroupedItem | undefined): string | null {
+  if (!item) return null
+  if (item.type === "session" && item.session) {
+    return item.isCurrent
+      ? `cur:${item.session.id}`
+      : `sess:${item.groupPath}:${item.session.id}`
+  }
+  if (item.virtualType) return `virt:${item.virtualType}`
+  return `group:${item.groupPath}`
+}
+
+/**
+ * Resolve where the cursor should sit after a reflow. If the previously-selected
+ * key still exists, follow it to its new index. Otherwise (item removed) clamp
+ * to the nearest valid index and re-key to whatever now sits there.
+ */
+export function resolveSelection(
+  items: GroupedItem[],
+  key: string | null,
+  currentIndex: number
+): { index: number; key: string | null } {
+  if (items.length === 0) return { index: 0, key: null }
+  if (key) {
+    const j = items.findIndex((it) => itemKey(it) === key)
+    if (j >= 0) return { index: j, key }
+  }
+  const clamped = Math.min(Math.max(currentIndex, 0), items.length - 1)
+  return { index: clamped, key: itemKey(items[clamped]) }
+}
+
 export const DEFAULT_GROUP_PATH = "my-sessions"
 export const DEFAULT_GROUP_NAME = "My Sessions"
 export const CURRENT_GROUP_PATH = "__current__"

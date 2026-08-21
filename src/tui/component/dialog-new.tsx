@@ -22,7 +22,8 @@ import { HistoryManager } from "@/core/history"
 import { getStorage } from "@/core/storage"
 import type { Tool, ClaudeSessionMode, RemoteHost } from "@/core/types"
 import { getToolCommand } from "@/core/types"
-import { getConfig } from "@/core/config"
+import { getConfig, saveConfig } from "@/core/config"
+import { addCurrentSessionId } from "@tui/util/session"
 import { exec } from "child_process"
 import { promisify } from "util"
 import { existsSync } from "fs"
@@ -49,6 +50,10 @@ async function commandExists(cmd: string, cwd?: string): Promise<boolean> {
     return false
   }
 }
+
+// Remote (SSH) sessions are disabled. Set to true to bring the feature back;
+// all remote backend code is left intact and simply dormant.
+const REMOTE_ENABLED = false
 
 // History managers for autocomplete suggestions
 // Path history is keyed per-host so local and remote paths don't mix
@@ -103,7 +108,10 @@ export function DialogNew(props?: { prefill?: SavedFormState }) {
   const defaultTool = restore?.selectedTool ?? (config().defaultTool || "claude")
   const defaultToolIndex = TOOLS.findIndex(t => t.value === defaultTool)
 
-  const remoteHosts = () => getConfig().remoteHosts ?? []
+  // Remote (SSH) sessions are disabled at the entry point. Forcing the host
+  // list empty hides the host picker so every new session is local. Flip
+  // REMOTE_ENABLED to true to restore the feature (backend code is untouched).
+  const remoteHosts = () => (REMOTE_ENABLED ? (getConfig().remoteHosts ?? []) : [])
   const [selectedRemoteHost, setSelectedRemoteHost] = createSignal<string>(restore?.selectedRemoteHost ?? "")
   const [hostIndex, setHostIndex] = createSignal(restore?.hostIndex ?? 0)
 
@@ -338,6 +346,12 @@ export function DialogNew(props?: { prefill?: SavedFormState }) {
       if (useWorktree() && worktreeBranchName) {
         branchNameHistory.addEntry(storage, worktreeBranchName)
       }
+
+      // Creating a session is a human action → add it to Current (top). The home
+      // screen reconciles its working set from config on the next refresh.
+      const cfg = getConfig()
+      const nextCurrentIds = addCurrentSessionId(cfg.currentSessionIds ?? [], session.id)
+      await saveConfig({ ...cfg, currentSessionIds: nextCurrentIds })
 
       const message = selectedRemoteHost()
         ? `Created ${session.title} on ${selectedRemoteHost()}`

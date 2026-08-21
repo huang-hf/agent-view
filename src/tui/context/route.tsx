@@ -11,6 +11,12 @@ export type RouteData =
   | { type: "session"; sessionId: string }
   | { type: "tasks" }
 
+function sameRoute(a: RouteData, b: RouteData): boolean {
+  if (a.type !== b.type) return false
+  if (a.type === "session" && b.type === "session") return a.sessionId === b.sessionId
+  return true
+}
+
 export const { use: useRoute, provider: RouteProvider } = createSimpleContext({
   name: "Route",
   init: () => {
@@ -27,6 +33,9 @@ export const { use: useRoute, provider: RouteProvider } = createSimpleContext({
         return state.data
       },
       navigate(route: RouteData) {
+        // No-op when already on the target — avoids polluting the history stack
+        // with self-entries (which made route.back() land on the current screen).
+        if (sameRoute(state.data, route)) return
         setState("history", [...state.history, state.data])
         setState("data", route)
       },

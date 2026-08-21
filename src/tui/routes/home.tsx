@@ -3,7 +3,7 @@
  * Shows session list on left, preview pane on right
  */
 
-import { createMemo, createSignal, For, Show, createEffect, onCleanup, Index, type Accessor } from "solid-js"
+import { createMemo, createSignal, For, Show, createEffect, onCleanup, untrack, Index, type Accessor } from "solid-js"
 import { TextAttributes, ScrollBoxRenderable } from "@opentui/core"
 import { useTerminalDimensions, useKeyboard, useRenderer } from "@opentui/solid"
 import { useTheme } from "@tui/context/theme"
@@ -35,11 +35,9 @@ import { formatRelativeTime, truncatePath } from "@tui/util/locale"
 import { STATUS_ICONS } from "@tui/util/status"
 import {
   addCurrentSessionId,
-  getInitialCurrentSessionIds,
-  getCurrentSessions,
-  getCurrentSessionIdsAfterRefresh,
-  mergeCurrentSessionSnapshots,
-  removeCurrentSessionId
+  removeCurrentSessionId,
+  pruneCurrentSessionIds,
+  selectCurrentSessions
 } from "@tui/util/session"
 import { createListNavigation } from "@tui/util/navigation"
 import { startHomePreviewLoop } from "@tui/util/preview"
@@ -50,6 +48,8 @@ import {
   ensureDefaultGroup,
   getGroupSessionCount,
   getGroupStatusSummary,
+  itemKey,
+  resolveSelection,
   DEFAULT_GROUP_PATH,
   TASKS_ENTRY_PATH,
   type GroupedItem
@@ -125,17 +125,17 @@ export function Home() {
   onCleanup(() => clearInterval(tasksPreviewInterval))
 
   const [selectedIndex, setSelectedIndex] = createSignal(0)
+  // Identity of the selected row, so the cursor follows the same item across
+  // async list reflows instead of pointing at whatever slides under its index.
+  const [selectedKey, setSelectedKey] = createSignal<string | null>(null)
   const [inputMode, setInputMode] = createSignal<"keyboard" | "mouse">("keyboard")
   const [previewContent, setPreviewContent] = createSignal<string>("")
   const [previewLoading, setPreviewLoading] = createSignal(false)
   const [currentExpanded, setCurrentExpanded] = createSignal(true)
-  const initialSessions = sync.session.list()
-  const initialCurrentConfigIds = getConfig().currentSessionIds
-  const initialCurrentSessionIds = getInitialCurrentSessionIds(initialCurrentConfigIds, initialSessions)
-  const [currentSessionIds, setCurrentSessionIds] = createSignal<string[]>(initialCurrentSessionIds)
-  const [currentSessionSnapshots, setCurrentSessionSnapshots] = createSignal<Session[]>(
-    getCurrentSessions(initialSessions, { ids: initialCurrentSessionIds })
-  )
+  // Current is a human-curated working set of session ids, persisted in config.
+  // Membership changes only on explicit user actions (add) / `x` / deletion —
+  // never on status. See src/tui/util/session.ts.
+  const [currentSessionIds, setCurrentSessionIds] = createSignal<string[]>(getConfig().currentSessionIds ?? [])
   let scrollRef: ScrollBoxRenderable | undefined
   let previewScrollRef: ScrollBoxRenderable | undefined
   let stopPreviewLoop: (() => void) | undefined
@@ -186,7 +186,9 @@ export function Home() {
   })
 
   const allSessions = createMemo(() => sync.session.list())
-  const currentSessions = createMemo(() => currentSessionSnapshots())
+  // Resolve the working-set ids to live session objects (id order, skip deleted,
+  // any status). Recomputes when the ids change or sessions refresh.
+  const currentSessions = createMemo(() => selectCurrentSessions(currentSessionIds(), allSessions()))
 
   const taskCounts = createMemo(() => {
     const tasks = getStorage().loadTasks()
@@ -204,10 +206,6 @@ export function Home() {
     return a.length === b.length && a.every((id, idx) => id === b[idx])
   }
 
-  function sameSessions(a: Session[], b: Session[]): boolean {
-    return a.length === b.length && a.every((session, idx) => session === b[idx])
-  }
-
   async function persistCurrentSessionIds(ids: string[]) {
     setCurrentSessionIds(ids)
     try {
@@ -217,25 +215,20 @@ export function Home() {
     }
   }
 
+  // Reconcile the working set with reality on every session refresh:
+  //  - prune ids whose session was deleted
+  //  - pick up ids added externally (the new-session dialog persists to config)
+  // config is the source of truth; the signal mirrors it for reactivity.
   createEffect(() => {
     const sessions = allSessions()
-    const configIds = getConfig().currentSessionIds
-    const existingIds = currentSessionIds()
-    const nextIds = getCurrentSessionIdsAfterRefresh(existingIds, sessions, {
-      hasPersistedIds: configIds !== undefined
+    untrack(() => {
+      const cfgIds = getConfig().currentSessionIds ?? []
+      const next = pruneCurrentSessionIds(cfgIds, sessions)
+      if (!sameIds(next, currentSessionIds())) setCurrentSessionIds(next)
+      if (!sameIds(next, cfgIds)) {
+        saveConfig({ ...getConfig(), currentSessionIds: next }).catch((err) => toast.error(err as Error))
+      }
     })
-
-    if (!sameIds(existingIds, nextIds) || (configIds === undefined && existingIds.length > 0)) {
-      persistCurrentSessionIds(nextIds)
-    }
-  })
-
-  createEffect(() => {
-    const existing = currentSessionSnapshots()
-    const next = mergeCurrentSessionSnapshots(existing, allSessions(), currentSessionIds())
-    if (!sameSessions(existing, next)) {
-      setCurrentSessionSnapshots(next)
-    }
   })
 
   function rememberCurrentSession(session: Session, item: GroupedItem | undefined) {
@@ -258,11 +251,24 @@ export function Home() {
     toast.show({ message: "Removed from Current", variant: "info", duration: 1500 })
   }
 
+  // Single entry point for user-initiated selection: records both the index and
+  // the item's identity key. Every place that moves the cursor must go through
+  // this (navigation, mouse, jumps) so the key never goes stale.
+  function select(index: number) {
+    setSelectedIndex(index)
+    setSelectedKey(itemKey(untrack(groupedItems)[index]))
+  }
+
+  // Keep selectedIndex pinned to selectedKey across reflows. Runs on every
+  // groupedItems change (status refresh, add/remove) and on user selection.
   createEffect(() => {
-    const len = groupedItems().length
-    if (selectedIndex() >= len && len > 0) {
-      setSelectedIndex(len - 1)
-    }
+    const items = groupedItems()
+    const key = selectedKey()
+    untrack(() => {
+      const res = resolveSelection(items, key, selectedIndex())
+      if (res.index !== selectedIndex()) setSelectedIndex(res.index)
+      if (res.key !== selectedKey()) setSelectedKey(res.key)
+    })
   })
 
   const selectedItem = createMemo(() => groupedItems()[selectedIndex()])
@@ -286,7 +292,7 @@ export function Home() {
   const move = createListNavigation(
     () => groupedItems().length,
     selectedIndex,
-    setSelectedIndex
+    select
   )
 
   // Fetch preview with debounce; keep showing previous content while loading
@@ -366,7 +372,7 @@ export function Home() {
     const items = groupedItems()
     const idx = items.findIndex(item => item.type === "group" && item.groupIndex === groupIndex)
     if (idx >= 0) {
-      setSelectedIndex(idx)
+      select(idx)
     }
   }
 
@@ -568,10 +574,10 @@ export function Home() {
       move(10)
     }
     if (evt.name === "home") {
-      setSelectedIndex(0)
+      select(0)
     }
     if (evt.name === "end") {
-      setSelectedIndex(Math.max(0, groupedItems().length - 1))
+      select(Math.max(0, groupedItems().length - 1))
     }
 
     // Number keys 1-9 to jump to groups
@@ -849,7 +855,7 @@ export function Home() {
         onMouseMove={() => setInputMode("mouse")}
         onMouseUp={() => {
           setInputMode("mouse")
-          setSelectedIndex(props.index)
+          select(props.index)
           if (props.item.virtualType === "tasks") {
             route.navigate({ type: "tasks" })
           } else if (props.item.virtualType === "current") {
@@ -859,7 +865,7 @@ export function Home() {
           }
         }}
         onMouseOver={() => {
-          if (inputMode() === "mouse") setSelectedIndex(props.index)
+          if (inputMode() === "mouse") select(props.index)
         }}
       >
         {/* Icon / arrow \u2014 use Geometric-Shapes glyphs (width-1 in OpenTUI's width
@@ -950,11 +956,11 @@ export function Home() {
         onMouseMove={() => setInputMode("mouse")}
         onMouseUp={() => {
           setInputMode("mouse")
-          setSelectedIndex(props.index)
+          select(props.index)
           handleAttach(props.session, groupedItems()[props.index])
         }}
         onMouseOver={() => {
-          if (inputMode() === "mouse") setSelectedIndex(props.index)
+          if (inputMode() === "mouse") select(props.index)
         }}
       >
         {/* Status icon with fixed width */}

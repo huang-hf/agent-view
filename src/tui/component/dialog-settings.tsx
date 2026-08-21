@@ -73,11 +73,6 @@ export function DialogSettings() {
         footer: formatHibernate(config.autoHibernateMinutes || 0),
       },
       {
-        title: "Remote hosts",
-        value: "remoteHosts" as const,
-        footer: `${(config.remoteHosts ?? []).length} configured`,
-      },
-      {
         title: "Copy .claude to worktree",
         value: "copyClaudeDir" as const,
         footer: (config.copyClaudeDir !== false) ? "Yes" : "No",
@@ -100,7 +95,6 @@ export function DialogSettings() {
             case "theme": return showTheme()
             case "defaultGroup": return showDefaultGroup()
             case "autoHibernate": return showAutoHibernate()
-            case "remoteHosts": return showRemoteHosts()
             case "copyClaudeDir": return showCopyClaudeDir()
             case "syncRemoteBranch": return showWorktreeSyncBranch()
           }

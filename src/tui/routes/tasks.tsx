@@ -155,6 +155,7 @@ export function Tasks() {
     dialog.push(() => (
       <DialogSelect
         title="发送给 Session"
+        placeholder="搜索 session…"
         options={sessions.map(s => ({ title: s.title, value: s.id }))}
         onSelect={async (opt) => {
           dialog.pop()
@@ -244,19 +245,19 @@ export function Tasks() {
             { title: "Space       — 切换完成状态（在两列间移动）", value: "" },
             { title: "s           — 发送给 session 并进入", value: "" },
             { title: "d           — 删除任务", value: "" },
-            { title: "q / Escape  — 返回主屏", value: "" },
+            { title: "Ctrl+Q / Esc — 返回主屏", value: "" },
           ]}
           onSelect={() => dialog.pop()}
         />
       ))
       return stop(evt)
     }
-    if (evt.name === "q" || evt.name === "escape") {
-      if (route.canGoBack()) {
-        route.back()
-      } else {
-        route.navigate({ type: "home" })
-      }
+    // Ctrl+Q (or Esc) returns to the dashboard — mirrors the Ctrl+Q detach
+    // used inside attached sessions. Plain q is intentionally not an exit.
+    // The task board is always launched from home, so go there directly rather
+    // than route.back() (whose history stack can contain stale entries).
+    if ((evt.ctrl && evt.name === "q") || evt.name === "escape") {
+      route.navigate({ type: "home" })
       return stop(evt)
     }
   })
@@ -306,7 +307,7 @@ export function Tasks() {
           {"j/k:移动  h/l:切换列  ↑/↓:排序  n:新建  Enter/e:编辑"}
         </text>
         <text fg={theme.textMuted}>
-          {"space:完成  s:发送并进入  d:删除  q:返回  ?:帮助"}
+          {"space:完成  s:发送并进入  d:删除  Ctrl+Q:返回  ?:帮助"}
         </text>
       </box>
     </box>

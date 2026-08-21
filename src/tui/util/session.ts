@@ -1,67 +1,17 @@
 /**
- * Session utilities
+ * Session utilities — the Current working set.
+ *
+ * Current is a purely human-curated set: a session joins when the user acts on
+ * it (create / attach / confirm / shortcut) and leaves only when the user
+ * removes it with `x` or the session is deleted. Membership does NOT depend on
+ * status, so hibernated/stopped/offline sessions stay until explicitly removed.
  */
 
 import type { Session } from "@/core/types"
 
 export const CURRENT_SESSIONS_LIMIT = 10
-export const CURRENT_SESSION_STATUSES = new Set(["running", "waiting", "idle"])
 
-/**
- * Sort sessions by creation time (newest first).
- * This provides a stable sort order that doesn't change when session
- * status changes or when sessions are accessed.
- */
-export function sortSessionsByCreatedAt(sessions: Session[]): Session[] {
-  return [...sessions].sort((a, b) => {
-    return b.createdAt.getTime() - a.createdAt.getTime()
-  })
-}
-
-/**
- * Select the sessions shown in the virtual Current group.
- */
-export function getCurrentSessions(
-  sessions: Session[],
-  options: { ids?: string[]; limit?: number } = {}
-): Session[] {
-  const limit = options.limit ?? CURRENT_SESSIONS_LIMIT
-  if (options.ids) {
-    const sessionsById = new Map(sessions.map((session) => [session.id, session]))
-    return normalizeCurrentSessionIds(options.ids, sessions, { limit })
-      .map((id) => sessionsById.get(id))
-      .filter((session): session is Session => !!session)
-  }
-
-  return [...sessions]
-    .filter((session) => CURRENT_SESSION_STATUSES.has(session.status))
-    .sort((a, b) => b.lastAccessed.getTime() - a.lastAccessed.getTime())
-    .slice(0, limit)
-}
-
-export function normalizeCurrentSessionIds(
-  ids: string[],
-  sessions: Session[],
-  options: { limit?: number } = {}
-): string[] {
-  const limit = options.limit ?? CURRENT_SESSIONS_LIMIT
-  const sessionsById = new Map(sessions.map((session) => [session.id, session]))
-  const result: string[] = []
-  const seen = new Set<string>()
-
-  for (const id of ids) {
-    if (seen.has(id)) continue
-    const session = sessionsById.get(id)
-    if (!session) continue
-    if (!CURRENT_SESSION_STATUSES.has(session.status)) continue
-    seen.add(id)
-    result.push(id)
-    if (result.length >= limit) break
-  }
-
-  return result
-}
-
+/** Add a session to the front of the Current set. No-op if already present. */
 export function addCurrentSessionId(
   ids: string[],
   sessionId: string,
@@ -72,57 +22,35 @@ export function addCurrentSessionId(
   return [sessionId, ...ids].slice(0, limit)
 }
 
+/** Remove a session from the Current set. */
 export function removeCurrentSessionId(ids: string[], sessionId: string): string[] {
   return ids.filter((id) => id !== sessionId)
 }
 
-export function getInitialCurrentSessionIds(
-  persistedIds: string[] | undefined,
-  sessions: Session[],
-  options: { limit?: number } = {}
-): string[] {
-  if (persistedIds !== undefined) return [...persistedIds]
-  return getCurrentSessions(sessions, { limit: options.limit }).map((session) => session.id)
+/** Drop ids that no longer map to an existing session (deleted), and dedupe. */
+export function pruneCurrentSessionIds(ids: string[], sessions: Session[]): string[] {
+  const existing = new Set(sessions.map((s) => s.id))
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const id of ids) {
+    if (seen.has(id) || !existing.has(id)) continue
+    seen.add(id)
+    out.push(id)
+  }
+  return out
 }
 
-export function mergeCurrentSessionSnapshots(
-  previous: Session[],
-  sessions: Session[],
-  ids: string[],
-  options: { limit?: number } = {}
-): Session[] {
-  const limit = options.limit ?? CURRENT_SESSIONS_LIMIT
-  const previousById = new Map(previous.map((session) => [session.id, session]))
-  const sessionsById = new Map(sessions.map((session) => [session.id, session]))
-  const result: Session[] = []
+/** Resolve the Current ids to live session objects, in id order, skipping gone. */
+export function selectCurrentSessions(ids: string[], sessions: Session[]): Session[] {
+  const byId = new Map(sessions.map((s) => [s.id, s]))
   const seen = new Set<string>()
-
+  const out: Session[] = []
   for (const id of ids) {
     if (seen.has(id)) continue
+    const session = byId.get(id)
+    if (!session) continue
     seen.add(id)
-
-    const live = sessionsById.get(id)
-    if (live) {
-      if (CURRENT_SESSION_STATUSES.has(live.status)) {
-        result.push(live)
-      }
-    } else {
-      const snapshot = previousById.get(id)
-      if (snapshot) result.push(snapshot)
-    }
-
-    if (result.length >= limit) break
+    out.push(session)
   }
-
-  return result
-}
-
-export function getCurrentSessionIdsAfterRefresh(
-  ids: string[],
-  sessions: Session[],
-  options: { hasPersistedIds: boolean; limit?: number }
-): string[] {
-  if (options.hasPersistedIds) return ids
-  if (ids.length > 0) return ids
-  return getCurrentSessions(sessions, { limit: options.limit }).map((session) => session.id)
+  return out
 }
