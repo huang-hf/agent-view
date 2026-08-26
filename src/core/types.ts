@@ -37,6 +37,8 @@ export interface Session {
   worktreeBranch: string
   toolData: Record<string, unknown>
   acknowledged: boolean
+  /** Free-text note, e.g. what this session is blocked/waiting on. */
+  note: string
 }
 
 export interface RemoteSession extends Session {

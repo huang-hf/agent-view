@@ -8,7 +8,8 @@
  * lay out within. Meant to sit inside a flexDirection="column" container.
  */
 
-import { createMemo, For, Show } from "solid-js"
+import { createMemo, createEffect, For, Show } from "solid-js"
+import { ScrollBoxRenderable } from "@opentui/core"
 import { useTheme } from "@tui/context/theme"
 import { activeTasks, doneTasks, groupDoneByDay } from "@/core/task-view"
 import type { Task } from "@/core/types"
@@ -68,6 +69,45 @@ export function TaskBoardView(props: TaskBoardViewProps) {
     return wrapText(t.text, detailWidth(), DETAIL_LINES)
   })
 
+  // Scrollable columns: long lists overflow into a scrollbox instead of being
+  // flex-shrunk into overlapping rows. Keep the selected row in view.
+  let activeScrollRef: ScrollBoxRenderable | undefined
+  let doneScrollRef: ScrollBoxRenderable | undefined
+
+  // Row offset of the selected done item, counting the day headers between groups.
+  function doneRowOffset(): number {
+    let y = 0
+    for (const g of groups()) {
+      y += 1 // date header
+      for (const it of g.items) {
+        if (it.idx === props.row) return y
+        y += 1
+      }
+    }
+    return y
+  }
+
+  function scrollIntoView(ref: ScrollBoxRenderable | undefined, targetY: number) {
+    if (!ref) return
+    const vh = ref.viewport?.height ?? 0
+    if (vh <= 0) return
+    const top = ref.scrollTop
+    if (targetY < top) ref.scrollTo(targetY)
+    else if (targetY >= top + vh) ref.scrollTo(targetY - vh + 1)
+  }
+
+  createEffect(() => {
+    const col = props.column
+    const r = props.row
+    if (col === 0) {
+      active() // reactive dep
+      scrollIntoView(activeScrollRef, r)
+    } else {
+      groups() // reactive dep
+      scrollIntoView(doneScrollRef, doneRowOffset())
+    }
+  })
+
   return (
     <>
       {/* Two-column board: 待办 | 已完成 */}
@@ -81,16 +121,18 @@ export function TaskBoardView(props: TaskBoardViewProps) {
             when={active().length > 0}
             fallback={<text fg={theme.textMuted}>{"  （空）"}</text>}
           >
-            <For each={active()}>
-              {(task, i) => {
-                const isSelected = () => props.column === 0 && i() === props.row
-                return (
-                  <text fg={isSelected() ? theme.primary : theme.text} bold={isSelected()}>
-                    {`${isSelected() ? "►" : " "} [ ] ${fit(task.text)}`}
-                  </text>
-                )
-              }}
-            </For>
+            <scrollbox flexGrow={1} scrollbarOptions={{ visible: true }} ref={(r: ScrollBoxRenderable) => { activeScrollRef = r }}>
+              <For each={active()}>
+                {(task, i) => {
+                  const isSelected = () => props.column === 0 && i() === props.row
+                  return (
+                    <text fg={isSelected() ? theme.primary : theme.text} bold={isSelected()}>
+                      {`${isSelected() ? "►" : " "} [ ] ${fit(task.text)}`}
+                    </text>
+                  )
+                }}
+              </For>
+            </scrollbox>
           </Show>
         </box>
 
@@ -108,24 +150,26 @@ export function TaskBoardView(props: TaskBoardViewProps) {
             when={done().length > 0}
             fallback={<text fg={theme.textMuted}>{"  （空）"}</text>}
           >
-            <For each={groups()}>
-              {(group) => (
-                <box flexDirection="column">
-                  {/* Date header — not selectable */}
-                  <text fg={theme.textMuted} bold>{` ${group.label}`}</text>
-                  <For each={group.items}>
-                    {(item) => {
-                      const isSelected = () => props.column === 1 && item.idx === props.row
-                      return (
-                        <text fg={isSelected() ? theme.primary : theme.textMuted} bold={isSelected()} dim>
-                          {`${isSelected() ? " ►" : "  "} [x] ${fit(item.task.text)}`}
-                        </text>
-                      )
-                    }}
-                  </For>
-                </box>
-              )}
-            </For>
+            <scrollbox flexGrow={1} scrollbarOptions={{ visible: true }} ref={(r: ScrollBoxRenderable) => { doneScrollRef = r }}>
+              <For each={groups()}>
+                {(group) => (
+                  <box flexDirection="column" flexShrink={0}>
+                    {/* Date header — not selectable */}
+                    <text fg={theme.textMuted} bold>{` ${group.label}`}</text>
+                    <For each={group.items}>
+                      {(item) => {
+                        const isSelected = () => props.column === 1 && item.idx === props.row
+                        return (
+                          <text fg={isSelected() ? theme.primary : theme.textMuted} bold={isSelected()} dim>
+                            {`${isSelected() ? " ►" : "  "} [x] ${fit(item.task.text)}`}
+                          </text>
+                        )
+                      }}
+                    </For>
+                  </box>
+                )}
+              </For>
+            </scrollbox>
           </Show>
         </box>
       </box>

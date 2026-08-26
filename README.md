@@ -40,6 +40,8 @@ When working with AI coding agents, you often need to run multiple agents on dif
 - **Tool Agnostic** - Works as a Claude Code manager, Gemini CLI orchestrator, OpenCode dashboard, or with any custom AI tool
 - **Keyboard-First** - Fully navigable terminal UI with keyboard shortcuts for maximum productivity
 - **Session Groups** - Organize sessions into groups by project or workflow
+- **Session Notes** - Press `R` to add a free-text note to a session (e.g. "waiting on a colleague for the 3090 box"). It shows inline in the list with a `⧗` marker and in full in the preview, so you can tell *why* a session is parked without entering it
+- **Menu-bar Widget (macOS)** - A tiny [SwiftBar](https://github.com/swiftbar/SwiftBar) plugin (`tools/swiftbar/`) shows your Current sessions' status right in the menu bar (`●` running / `◐` waiting / `○` idle); the title turns orange the moment a session is waiting on you
 - **Task Board** - A built-in kanban (待办 / 已完成) to jot down what each agent should do next. Completed tasks group into a date timeline (今日 / 昨日 / MMDD), and you can push a task straight into a running session. Fully scriptable via `av task` so an agent can queue its own follow-ups
 - **Persistent State** - Sessions survive terminal restarts and system reboots via tmux
 
@@ -136,7 +138,7 @@ tailscale serve status
 | `←/h` | Collapse group |
 | `d` | Delete session or group |
 | `r` | Restart session |
-| `R` | Rename session or group |
+| `R` | Edit session (title + note) / rename group |
 | `f` | Duplicate session (pre-fills new session dialog with same config) |
 | `s` | Open shortcuts dialog |
 | `g` | Create new group |
@@ -194,6 +196,18 @@ av task list                      # list all tasks (id / status / text)
 av task done <id>                 # mark a task done
 av task edit <id> "new text"      # replace a task's text
 ```
+
+### Menu-bar Widget (macOS)
+
+Glance at your Current sessions' status from the menu bar without switching to the TUI. It reads `av --list --json` plus your Current set, showing `●` running / `◐` waiting / `○` idle; the title turns **orange** the moment a session is waiting on you.
+
+```bash
+brew install --cask swiftbar   # once
+# then point SwiftBar's plugin folder at the script (or symlink it there):
+cp tools/swiftbar/agent-view.3s.py "$HOME/SwiftBarPlugins/"
+```
+
+The `.3s.` in the filename sets the refresh interval. Statuses stay live only while an agent-view instance (the TUI or `av --web`) is running.
 
 ### Git Worktree Sync
 

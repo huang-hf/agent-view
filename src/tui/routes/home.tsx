@@ -13,7 +13,7 @@ import { DialogSelect } from "@tui/ui/dialog-select"
 import { useToast } from "@tui/ui/toast"
 import { DialogNew } from "@tui/component/dialog-new"
 import type { SavedFormState } from "@tui/component/dialog-new"
-import { DialogRename } from "@tui/component/dialog-rename"
+import { DialogEditSession } from "@tui/component/dialog-rename"
 import { DialogGroup } from "@tui/component/dialog-group"
 import { DialogMove } from "@tui/component/dialog-move"
 import { DialogShortcuts } from "@tui/component/dialog-shortcuts"
@@ -673,11 +673,11 @@ export function Home() {
       }
     }
 
-    // R (Shift+r) to rename session OR group
+    // R (Shift+r) to edit session (title + note) OR rename group
     if (evt.name === "r" && evt.shift) {
       const item = selectedItem()
       if (item?.type === "session" && item.session) {
-        dialog.push(() => <DialogRename session={item.session!} />)
+        dialog.push(() => <DialogEditSession session={item.session!} />)
       } else if (item?.type === "group" && item.virtualType === "current") {
         toast.show({ message: "Current is a virtual group", variant: "info", duration: 1500 })
       } else if (item?.type === "group" && item.group) {
@@ -732,23 +732,6 @@ export function Home() {
       return
     }
 
-    // z to hibernate session
-    if (evt.name === "z" && !evt.shift && !evt.ctrl) {
-      const session = selectedSession()
-      if (session) {
-        if (session.tool !== "claude" || !session.toolData?.claudeSessionId) {
-          toast.show({ message: "Only Claude sessions with a session ID can be hibernated", variant: "error", duration: 2000 })
-          return
-        }
-        if (session.status === "stopped" || session.status === "hibernated") {
-          toast.show({ message: "Session is already stopped/hibernated", variant: "error", duration: 2000 })
-          return
-        }
-        handleHibernate(session)
-      }
-      return
-    }
-
     // y to quick-confirm a waiting session without attaching.
     // Codex commonly uses [y/N], so it needs an explicit "y" before Enter.
     if (evt.name === "y" && !evt.shift && !evt.ctrl) {
@@ -787,11 +770,6 @@ export function Home() {
       return
     }
 
-    // o to open recents dialog
-    if (evt.name === "o" && !evt.shift && !evt.ctrl) {
-      dialog.push(() => <DialogRecents />)
-      return
-    }
 
     // c to open settings dialog
     if (evt.name === "c" && !evt.shift && !evt.ctrl) {
@@ -931,7 +909,6 @@ export function Home() {
       let reserved = 2 // left + right padding
       reserved += indent // indentation
       reserved += 2 // status icon + space
-      reserved += 6 // memory indicator (e.g., "512M ")
       if (!useDualColumn()) {
         reserved += 8 // tool name + space in single column mode
       }
@@ -939,11 +916,22 @@ export function Home() {
     })
 
     const maxTitleLen = createMemo(() => Math.max(10, leftWidth() - reservedWidth()))
-    const title = createMemo(() => {
+
+    function fit(s: string, n: number): string {
+      return s.length > n ? s.slice(0, Math.max(0, n - 1)) + "…" : s
+    }
+
+    // Split the available text width between the title and the note ("⏳ …"),
+    // so the row reads `title ⏳ note` with each side truncated to fit.
+    const display = createMemo<{ title: string; note: string }>(() => {
       const max = maxTitleLen()
-      return props.session.title.length > max
-        ? props.session.title.slice(0, max - 2) + ".."
-        : props.session.title
+      const rawTitle = props.session.title
+      const rawNote = props.session.note
+      if (!rawNote) return { title: fit(rawTitle, max), note: "" }
+      const budget = Math.max(0, max - 3) // " ⏳ "
+      const titleText = fit(rawTitle, Math.max(6, Math.floor(budget * 0.6)))
+      const noteBudget = budget - titleText.length
+      return { title: titleText, note: noteBudget >= 2 ? fit(rawNote, noteBudget) : "" }
     })
 
     return (
@@ -982,8 +970,15 @@ export function Home() {
           fg={isSelected() ? theme.selectedListItemText : theme.text}
           attributes={isSelected() ? TextAttributes.BOLD : undefined}
         >
-          {title()}
+          {display().title}
         </text>
+
+        {/* Note — what this session is blocked/waiting on, shown inline in amber */}
+        <Show when={props.session.note}>
+          <text fg={isSelected() ? theme.selectedListItemText : theme.warning} flexShrink={0}>
+            {display().note ? ` ⧗ ${display().note}` : " ⧗"}
+          </text>
+        </Show>
 
         {/* Spacer */}
         <text flexGrow={1}> </text>
@@ -994,23 +989,6 @@ export function Home() {
             {props.session.tool}
           </text>
           <text> </text>
-        </Show>
-
-        {/* Memory or hibernation indicator */}
-        <Show when={props.session.status === "hibernated"} fallback={
-          <Show when={sync.session.getMemoryMB(props.session.id)}>
-            {(mb: () => number) => (
-              <box flexShrink={0}>
-                <text fg={isSelected() ? theme.selectedListItemText : theme.textMuted}>
-                  {" " + (mb() >= 1024 ? `${(mb() / 1024).toFixed(1)}G` : `${mb()}M`)}
-                </text>
-              </box>
-            )}
-          </Show>
-        }>
-          <box flexShrink={0}>
-            <text fg={theme.textMuted}>{" zzz"}</text>
-          </box>
         </Show>
 
       </box>
@@ -1048,6 +1026,15 @@ export function Home() {
                 </Show>
               </box>
             </box>
+
+            {/* Note — what this session is blocked/waiting on */}
+            <Show when={s().note}>
+              <box height={1}>
+                <text fg={theme.warning}>
+                  {`⧗ ${s().note}`.slice(0, Math.max(0, rightWidth() - 2))}
+                </text>
+              </box>
+            </Show>
 
             {/* Session info */}
             <box flexDirection="row" gap={2} height={1}>
@@ -1289,15 +1276,11 @@ export function Home() {
         </box>
         <box flexDirection="column" alignItems="center">
           <text fg={theme.text}>R</text>
-          <text fg={theme.textMuted}>rename</text>
+          <text fg={theme.textMuted}>edit</text>
         </box>
         <box flexDirection="column" alignItems="center">
           <text fg={theme.text}>f</text>
           <text fg={theme.textMuted}>dup</text>
-        </box>
-        <box flexDirection="column" alignItems="center">
-          <text fg={theme.text}>z</text>
-          <text fg={theme.textMuted}>hibernate</text>
         </box>
         <Show when={selectedSession()?.status === "waiting"}>
           <box flexDirection="column" alignItems="center">
@@ -1305,10 +1288,6 @@ export function Home() {
             <text fg={theme.warning}>confirm</text>
           </box>
         </Show>
-        <box flexDirection="column" alignItems="center">
-          <text fg={theme.text}>o</text>
-          <text fg={theme.textMuted}>recents</text>
-        </box>
         <box flexDirection="column" alignItems="center">
           <text fg={theme.text}>s</text>
           <text fg={theme.textMuted}>shortcuts</text>

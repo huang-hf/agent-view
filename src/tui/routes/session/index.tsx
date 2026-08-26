@@ -12,7 +12,7 @@ import { useRoute } from "@tui/context/route"
 import { useDialog } from "@tui/ui/dialog"
 import { useToast } from "@tui/ui/toast"
 import { DialogSessions } from "@tui/component/dialog-sessions"
-import { DialogRename } from "@tui/component/dialog-rename"
+import { DialogEditSession } from "@tui/component/dialog-rename"
 import { getSessionManager } from "@/core/session"
 import type { Session as SessionType, SessionStatus } from "@/core/types"
 import { SessionHeader } from "./header"
@@ -94,7 +94,7 @@ export function Session() {
     if (evt.name === "R" && evt.shift && !inputRef?.focused) {
       const s = session()
       if (s) {
-        dialog.replace(() => <DialogRename session={s} />)
+        dialog.replace(() => <DialogEditSession session={s} />)
       }
     }
     if (evt.name === "l" && evt.ctrl) {

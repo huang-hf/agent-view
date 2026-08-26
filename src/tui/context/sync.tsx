@@ -170,6 +170,10 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           await manager.updateTitle(id, title)
           refresh()
         },
+        setNote(id: string, note: string): void {
+          manager.setNote(id, note)
+          refresh()
+        },
         moveToGroup(id: string, groupPath: string): void {
           manager.moveToGroup(id, groupPath)
           refresh()

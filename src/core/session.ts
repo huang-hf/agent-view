@@ -616,7 +616,8 @@ export class SessionManager {
       worktreeBranch: options.worktreeBranch || "",
       toolData,
       acknowledged: false,
-      remoteHost: options.remoteHost || ""
+      remoteHost: options.remoteHost || "",
+      note: ""
     }
 
     storage.saveSession(session)
@@ -1004,6 +1005,12 @@ export class SessionManager {
   updateTitle(sessionId: string, title: string): void {
     const storage = getStorage()
     storage.updateSessionField(sessionId, "title", title)
+    storage.touch()
+  }
+
+  setNote(sessionId: string, note: string): void {
+    const storage = getStorage()
+    storage.updateSessionField(sessionId, "note", note)
     storage.touch()
   }
 
