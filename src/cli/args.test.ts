@@ -64,3 +64,21 @@ describe("parseArgs output/confirm", () => {
     expect(result).toEqual({ type: "interrupt", id: "abc" })
   })
 })
+
+describe("parseArgs monitor", () => {
+  test("parses --monitor", () => {
+    expect(parseArgs(["node", "av", "--monitor"])).toEqual({ type: "monitor" })
+  })
+
+  test("parses monitor install", () => {
+    expect(parseArgs(["node", "av", "monitor", "install"])).toEqual({ type: "monitor-ctl", action: "install" })
+  })
+
+  test("parses monitor uninstall", () => {
+    expect(parseArgs(["node", "av", "monitor", "uninstall"])).toEqual({ type: "monitor-ctl", action: "uninstall" })
+  })
+
+  test("parses monitor status", () => {
+    expect(parseArgs(["node", "av", "monitor", "status"])).toEqual({ type: "monitor-ctl", action: "status" })
+  })
+})
