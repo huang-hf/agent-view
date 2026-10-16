@@ -26,7 +26,7 @@ const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replac
 
 export function buildPlist(avPath: string): string {
   const log = esc(monitorLogFile())
-  avPath = esc(avPath)
+  const escAvPath = esc(avPath)
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -35,7 +35,7 @@ export function buildPlist(avPath: string): string {
   <string>${LAUNCH_AGENT_LABEL}</string>
   <key>ProgramArguments</key>
   <array>
-    <string>${avPath}</string>
+    <string>${escAvPath}</string>
     <string>--monitor</string>
   </array>
   <key>RunAtLoad</key>
@@ -118,7 +118,7 @@ export async function installAgent(): Promise<boolean> {
 
   let res = await launchctl(["bootstrap", domain, target])
   for (let attempt = 0; attempt < 5 && !res.ok; attempt++) {
-    if (!(res.output.includes("5:") || res.output.includes("Input/output error"))) break
+    if (!(/(^|\s)5:/.test(res.output) || res.output.includes("Input/output error"))) break
     await sleep(500)
     res = await launchctl(["bootstrap", domain, target])
   }
@@ -159,7 +159,7 @@ export async function agentStatus(): Promise<string> {
   const pidFile = monitorPidFile()
   if (fs.existsSync(pidFile)) {
     const pid = parseInt(fs.readFileSync(pidFile, "utf8").trim(), 10)
-    if (isNaN(pid)) {
+    if (isNaN(pid) || pid <= 0) {
       lines.push("monitor pid: (invalid pidfile)")
     } else {
       let alive = false
