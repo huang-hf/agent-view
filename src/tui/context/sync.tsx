@@ -40,6 +40,10 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
 
     // Load sessions and groups
     function refresh() {
+      // Don't clobber the store with an empty read from a closed DB (e.g. a
+      // poll firing during shutdown). loadSessions() returns [] when closed;
+      // treating that as "no sessions" would wipe derived state like Current.
+      if (storage.isClosed()) return
       const sessions = storage.loadSessions()
       const groups = storage.loadGroups()
 
