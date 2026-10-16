@@ -208,7 +208,7 @@ fi
 # Never abort the installer on failure.
 install_monitor() {
     if [[ "$OSTYPE" == darwin* ]]; then
-        if "$INSTALL_DIR/av" monitor install >/dev/null 2>&1; then
+        if "$INSTALL_DIR/$APP" monitor install >/dev/null 2>&1; then
             echo -e "  ${GREEN}Status monitor installed (launchd)${NC}"
         else
             echo -e "  ${MUTED}Could not install status monitor (run 'av monitor install' manually)${NC}"

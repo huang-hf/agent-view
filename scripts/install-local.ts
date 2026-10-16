@@ -82,7 +82,7 @@ await copyFile(tmpBin, NEW_BIN)
 await chmod(NEW_BIN, 0o755)
 if (process.platform === "darwin") {
   console.log("🔏 Re-signing binary (macOS)...")
-  await $`codesign --sign - --force ${NEW_BIN}`
+  await $`codesign --sign - --force --identifier agent-view ${NEW_BIN}`
 }
 await rename(NEW_BIN, INSTALL_BIN)
 await $`rm -f ${tmpBin}`
