@@ -207,7 +207,19 @@ brew install --cask swiftbar   # once
 cp tools/swiftbar/agent-view.3s.py "$HOME/SwiftBarPlugins/"
 ```
 
-The `.3s.` in the filename sets the refresh interval. Statuses stay live only while an agent-view instance (the TUI or `av --web`) is running.
+The `.3s.` in the filename sets the refresh interval.
+
+On macOS, the installer (`install.sh` or `bun run install-local`) also sets up a tiny **status monitor**: a launchd LaunchAgent (`com.agent-view.monitor`) that runs `av --monitor` in the background. It keeps your session statuses fresh even when no TUI is open, or when the TUI is attached inside a session. Manage it with:
+
+```bash
+av monitor status      # is it installed / loaded / running?
+av monitor install     # (re)install the LaunchAgent
+av monitor uninstall   # remove it
+```
+
+Logs go to `~/.agent-orchestrator/monitor.log`. launchd only restarts the monitor after a crash, so if you stop it manually (e.g. `kill`) it stays down until your next login or `av monitor install`.
+
+Without the monitor (e.g. on Linux), statuses stay live only while an agent-view instance (the TUI or `av --web`) is running.
 
 ### Git Worktree Sync
 
