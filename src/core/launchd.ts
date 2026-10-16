@@ -22,8 +22,11 @@ export function plistPath(): string {
   return path.join(os.homedir(), "Library", "LaunchAgents", `${LAUNCH_AGENT_LABEL}.plist`)
 }
 
+const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+
 export function buildPlist(avPath: string): string {
-  const log = monitorLogFile()
+  const log = esc(monitorLogFile())
+  avPath = esc(avPath)
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -54,13 +57,22 @@ export function isMacOS(): boolean {
   return process.platform === "darwin"
 }
 
-// Resolve the real av binary: follow the symlink chain from process.execPath's
-// sibling `av`, else fall back to the running executable itself.
+// Resolve the real av binary. If the running executable is the compiled
+// binary (named `agent-view` or `av`), use its real path. Otherwise (e.g. running
+// under bun) fall back to the installed ~/.local/bin/av or
+// ~/.agent-view/bin/agent-view, and finally to process.execPath.
 export function resolveAvPath(): string {
+  const base = path.basename(process.execPath)
+  if (base === "agent-view" || base === "av") {
+    try {
+      return fs.realpathSync(process.execPath)
+    } catch {
+      // fall through to candidates
+    }
+  }
   const candidates = [
     path.join(os.homedir(), ".local", "bin", "av"),
     path.join(os.homedir(), ".agent-view", "bin", "agent-view"),
-    process.execPath,
   ]
   for (const c of candidates) {
     try {
@@ -81,10 +93,12 @@ async function launchctl(args: string[]): Promise<{ ok: boolean; output: string 
   }
 }
 
-export async function installAgent(): Promise<void> {
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
+
+export async function installAgent(): Promise<boolean> {
   if (!isMacOS()) {
     console.log("av monitor: launchd is macOS-only; skipping agent install.")
-    return
+    return true
   }
   const target = plistPath()
   fs.mkdirSync(path.dirname(target), { recursive: true })
@@ -92,13 +106,28 @@ export async function installAgent(): Promise<void> {
   fs.writeFileSync(target, buildPlist(resolveAvPath()))
 
   const domain = `gui/${process.getuid?.() ?? 0}`
-  // Reload idempotently: bootout any existing instance (ignore failure), then bootstrap.
+  const service = `${domain}/${LAUNCH_AGENT_LABEL}`
+  // Reload idempotently: bootout any existing instance (ignore failure),
+  // wait for teardown to finish, then bootstrap with retries.
   await launchctl(["bootout", domain, target])
-  const res = await launchctl(["bootstrap", domain, target])
+  for (let i = 0; i < 20; i++) {
+    const printed = await launchctl(["print", service])
+    if (!printed.ok) break
+    await sleep(250)
+  }
+
+  let res = await launchctl(["bootstrap", domain, target])
+  for (let attempt = 0; attempt < 5 && !res.ok; attempt++) {
+    if (!(res.output.includes("5:") || res.output.includes("Input/output error"))) break
+    await sleep(500)
+    res = await launchctl(["bootstrap", domain, target])
+  }
   if (!res.ok) {
-    console.warn(`av monitor: launchctl bootstrap reported: ${res.output}`)
+    console.error(`av monitor: launchctl bootstrap failed: ${res.output}`)
+    return false
   }
   console.log(`av monitor installed (${LAUNCH_AGENT_LABEL}).`)
+  return true
 }
 
 export async function uninstallAgent(): Promise<void> {
@@ -130,9 +159,13 @@ export async function agentStatus(): Promise<string> {
   const pidFile = monitorPidFile()
   if (fs.existsSync(pidFile)) {
     const pid = parseInt(fs.readFileSync(pidFile, "utf8").trim(), 10)
-    let alive = false
-    try { process.kill(pid, 0); alive = true } catch { alive = false }
-    lines.push(`monitor pid: ${pid} (${alive ? "alive" : "dead"})`)
+    if (isNaN(pid)) {
+      lines.push("monitor pid: (invalid pidfile)")
+    } else {
+      let alive = false
+      try { process.kill(pid, 0); alive = true } catch (e: any) { alive = e?.code === "EPERM" }
+      lines.push(`monitor pid: ${pid} (${alive ? "alive" : "dead"})`)
+    }
   } else {
     lines.push("monitor pid: (no pidfile)")
   }

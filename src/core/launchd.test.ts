@@ -11,3 +11,9 @@ test("buildPlist embeds label, av path + --monitor, and keepalive", () => {
   expect(xml).toContain("<key>KeepAlive</key>")
   expect(xml).toContain(monitorLogFile())
 })
+
+test("buildPlist XML-escapes the av path", () => {
+  const xml = buildPlist("/tmp/a&b/av")
+  expect(xml).toContain("/tmp/a&amp;b/av")
+  expect(xml).not.toContain("/tmp/a&b/av")
+})
