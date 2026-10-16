@@ -35,10 +35,20 @@ main() {
   echo -e "${BLUE}╰───────────────────────────────────╯${NC}"
   echo ""
 
-  # Remove the status-monitor LaunchAgent (macOS) while av is still present.
-  if [[ "$OSTYPE" == darwin* ]] && [ -x "$BIN_DIR/av" ]; then
+  # Remove the status-monitor LaunchAgent (macOS) before deleting binaries.
+  if [[ "$OSTYPE" == darwin* ]]; then
     log "Removing status monitor (launchd)..."
-    "$BIN_DIR/av" monitor uninstall >/dev/null 2>&1 || true
+    for av_bin in "$BIN_DIR/av" "$INSTALL_DIR/bin/av"; do
+      if [ -x "$av_bin" ]; then
+        "$av_bin" monitor uninstall >/dev/null 2>&1 || true
+        break
+      fi
+    done
+    # Fallback regardless of whether av was found/worked.
+    PLIST="$HOME/Library/LaunchAgents/com.agent-view.monitor.plist"
+    launchctl bootout "gui/$(id -u)" "$PLIST" >/dev/null 2>&1 || true
+    rm -f "$PLIST"
+    rm -f "$HOME/.agent-orchestrator/monitor.pid"
   fi
 
   # Remove binaries
