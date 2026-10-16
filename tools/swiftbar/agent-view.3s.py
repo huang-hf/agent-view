@@ -10,7 +10,8 @@
 #
 # A tiny menu-bar glance for your "Current" agent-view sessions. It shows the
 # same status glyphs as the TUI so you can perceive status without looking at
-# the full app:  ◐ waiting (needs you) · ● running · ○ idle
+# the full app:  ◐ waiting (needs you) · ● running · ○ idle · ⧗ blocked
+# (an idle session you parked with a note via `R` in the TUI)
 # The title turns orange whenever a session is waiting on you.
 #
 # Install:
@@ -44,7 +45,19 @@ DOT = {
     "stopped": "◻",
     "hibernated": "◉",
     "offline": "◌",
+    "blocked": "⧗",
 }
+
+
+def display_status(s):
+    # An idle session carrying a note (set with `R` in the TUI) is parked on
+    # purpose — "waiting on something else" — so show it as blocked rather than
+    # lumping it in with truly idle sessions. Any other status (running,
+    # waiting, …) wins over the note so nothing that needs you gets hidden.
+    status = s.get("status", "")
+    if status == "idle" and (s.get("note") or "").strip():
+        return "blocked"
+    return status
 
 
 def find_av():
@@ -93,10 +106,11 @@ def main():
     # Preserve the Current order; skip ids whose session no longer exists.
     cur = [by_id[i] for i in current_ids if i in by_id]
 
-    counts = Counter(s.get("status", "") for s in cur)
+    counts = Counter(display_status(s) for s in cur)
     w = counts.get("waiting", 0)
     r = counts.get("running", 0)
     idle = counts.get("idle", 0)
+    blocked = counts.get("blocked", 0)
 
     # Menu-bar title: agent-view glyphs, only non-zero active counts so it stays
     # calm until a session needs you. When any session is waiting, the whole
@@ -108,6 +122,8 @@ def main():
         segs.append(f"●{r}")
     if idle:
         segs.append(f"○{idle}")
+    if blocked:
+        segs.append(f"⧗{blocked}")
     title = " ".join(segs) if segs else "◌"
     # When something is waiting on you, the whole title turns orange AND larger
     # so the ◐ is unmissable; otherwise it stays calm at the default size.
@@ -118,10 +134,14 @@ def main():
     print("---")
     print(f"Current sessions ({len(cur)}) | size=11")
     for s in cur:
-        status = s.get("status", "")
+        status = display_status(s)
         dot = DOT.get(status, "◌")
         title = (s.get("title") or "").replace("|", "¦")
-        print(f"{dot} {title}  ({status}) | size=13")
+        if status == "blocked":
+            note = (s.get("note") or "").strip().replace("|", "¦")
+            print(f"{dot} {title} — {note} | size=13")
+        else:
+            print(f"{dot} {title}  ({status}) | size=13")
     print("---")
     print("Refresh | refresh=true")
 

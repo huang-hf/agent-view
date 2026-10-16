@@ -203,11 +203,25 @@ else
     fi
 fi
 
+# Install the macOS status-monitor LaunchAgent so session status stays fresh
+# even when no TUI is open or the TUI is attached inside a session.
+# Never abort the installer on failure.
+install_monitor() {
+    if [[ "$OSTYPE" == darwin* ]]; then
+        if "$INSTALL_DIR/$APP" monitor install >/dev/null 2>&1; then
+            echo -e "  ${GREEN}Status monitor installed (launchd)${NC}"
+        else
+            echo -e "  ${MUTED}Could not install status monitor (run 'av monitor install' manually)${NC}"
+        fi
+    fi
+}
+
 check_version() {
     if command -v agent-view >/dev/null 2>&1; then
         installed_version=$(agent-view --version 2>/dev/null || echo "")
         if [[ "$installed_version" == "$specific_version" ]]; then
             echo -e "${MUTED}Version ${NC}$specific_version${MUTED} already installed${NC}"
+            install_monitor
             exit 0
         else
             echo -e "${MUTED}Installed version: ${NC}$installed_version"
@@ -257,8 +271,10 @@ download_and_install() {
 
 install_from_binary() {
     echo -e "\n${MUTED}Installing ${NC}$APP ${MUTED}from: ${NC}$binary_path"
-    cp "$binary_path" "$INSTALL_DIR/$APP"
-    chmod 755 "$INSTALL_DIR/$APP"
+    # Copy beside, then atomically replace (don't overwrite a running binary in place)
+    cp "$binary_path" "$INSTALL_DIR/$APP.new"
+    chmod 755 "$INSTALL_DIR/$APP.new"
+    mv -f "$INSTALL_DIR/$APP.new" "$INSTALL_DIR/$APP"
     ln -sf "$INSTALL_DIR/$APP" "$INSTALL_DIR/av"
 }
 
@@ -302,6 +318,8 @@ if [[ "$no_modify_path" != "true" ]]; then
         esac
     fi
 fi
+
+install_monitor
 
 echo ""
 echo -e "${GREEN}Installation complete!${NC}"

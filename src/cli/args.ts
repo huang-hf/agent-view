@@ -28,6 +28,8 @@ export type CLICommand =
   | { type: "task-list" }
   | { type: "task-done"; id: string }
   | { type: "task-edit"; id: string; text: string }
+  | { type: "monitor" }
+  | { type: "monitor-ctl"; action: "install" | "uninstall" | "status" }
 
 export interface NewOptions {
   path: string
@@ -71,6 +73,10 @@ export function parseArgs(argv: string[]): CLICommand {
 
   if (getFlag(args, "--version") || getFlag(args, "-v")) {
     return { type: "version" }
+  }
+
+  if (getFlag(args, "--monitor")) {
+    return { type: "monitor" }
   }
 
   if (getFlag(args, "--web")) {
@@ -270,6 +276,15 @@ export function parseArgs(argv: string[]): CLICommand {
     return { type: "auto-hibernate" }
   }
 
+  if (args[0] === "monitor") {
+    const sub = args[1]
+    if (sub === "install" || sub === "uninstall" || sub === "status") {
+      return { type: "monitor-ctl", action: sub }
+    }
+    console.error("Unknown monitor subcommand. Usage: av monitor [install|uninstall|status]")
+    process.exit(1)
+  }
+
   if (args[0] === "task") {
     const sub = args[1]
     if (sub === "add") {
@@ -334,6 +349,8 @@ Usage:
   av --wake <id>                  Resume a hibernated session
   av --auto-hibernate [minutes]   Set/show auto-hibernate timeout (0 to disable)
   av task <subcommand>            Manage the task board (see Tasks below)
+  av --monitor                    Run the headless status monitor (used by launchd)
+  av monitor <install|uninstall|status>   Manage the macOS launchd status monitor
 
 TUI Options:
   --light                         Use light mode theme

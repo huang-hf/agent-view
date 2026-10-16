@@ -14,7 +14,7 @@
  */
 
 import path from "path"
-import { mkdir, copyFile, chmod, rm, symlink } from "fs/promises"
+import { mkdir, copyFile, chmod, rm, symlink, rename } from "fs/promises"
 import { existsSync } from "fs"
 import solidPlugin from "@opentui/solid/bun-plugin"
 import { $ } from "bun"
@@ -75,8 +75,16 @@ await chmod(tmpBin, 0o755)
 if (!existsSync(path.dirname(INSTALL_BIN))) {
   await mkdir(path.dirname(INSTALL_BIN), { recursive: true })
 }
-await copyFile(tmpBin, INSTALL_BIN)
-await chmod(INSTALL_BIN, 0o755)
+// Stage beside the target, sign there, then atomically rename so a running
+// (signed) binary is never overwritten in place.
+const NEW_BIN = INSTALL_BIN + ".new"
+await copyFile(tmpBin, NEW_BIN)
+await chmod(NEW_BIN, 0o755)
+if (process.platform === "darwin") {
+  console.log("🔏 Re-signing binary (macOS)...")
+  await $`codesign --sign - --force --identifier agent-view ${NEW_BIN}`
+}
+await rename(NEW_BIN, INSTALL_BIN)
 await $`rm -f ${tmpBin}`
 
 // Step 4: Refresh user-facing command entrypoints
@@ -86,10 +94,16 @@ for (const linkPath of [LOCAL_AGENT_VIEW, LOCAL_AV]) {
   await symlink(INSTALL_BIN, linkPath)
 }
 
-// Step 5: Re-sign on macOS (prevents "killed" due to invalid signature)
+// (Step 5, macOS re-sign, now happens on the staged file in Step 3.)
+
+// Install/refresh the macOS status-monitor LaunchAgent.
 if (process.platform === "darwin") {
-  console.log("🔏 Re-signing binary (macOS)...")
-  await $`codesign --sign - --force ${INSTALL_BIN}`
+  console.log("🛰  Installing status monitor (launchd)...")
+  try {
+    await $`${LOCAL_AV} monitor install`
+  } catch (e) {
+    console.warn("⚠️  Could not install status monitor; run 'av monitor install' manually.")
+  }
 }
 
 console.log(`✅ Installed to ${INSTALL_BIN}`)
