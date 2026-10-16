@@ -295,6 +295,31 @@ async function main() {
     return
   }
 
+  if (command.type === "monitor") {
+    try {
+      const { runMonitor } = await import("./core/monitor")
+      await runMonitor()
+    } catch (error) {
+      console.error("Fatal error:", error)
+      process.exit(1)
+    }
+    return
+  }
+
+  if (command.type === "monitor-ctl") {
+    try {
+      const { installAgent, uninstallAgent, agentStatus } = await import("./core/launchd")
+      if (command.action === "install") {
+        if (!(await installAgent())) process.exit(1)
+      } else if (command.action === "uninstall") await uninstallAgent()
+      else console.log(await agentStatus())
+    } catch (error) {
+      console.error("Fatal error:", error)
+      process.exit(1)
+    }
+    return
+  }
+
   if (command.type === "web") {
     try {
       if (command.daemon) {
