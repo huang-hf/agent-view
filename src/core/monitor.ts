@@ -63,6 +63,10 @@ export async function runMonitor(): Promise<void> {
   process.on("SIGTERM", shutdown)
   process.on("SIGINT", shutdown)
 
+  // One bad refresh cycle must not kill the daemon.
+  process.on("unhandledRejection", (e) => console.error("av monitor: unhandled rejection", e))
+  process.on("uncaughtException", (e) => console.error("av monitor: uncaught exception", e))
+
   // Keep the process alive. The setInterval inside startRefreshLoop already
   // holds the event loop open; this promise never resolves until a signal
   // triggers process.exit in shutdown().

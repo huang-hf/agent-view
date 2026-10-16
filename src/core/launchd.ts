@@ -24,9 +24,25 @@ export function plistPath(): string {
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
 
-export function buildPlist(avPath: string): string {
+const DEFAULT_AGENT_PATH = ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin"]
+
+// launchd starts agents with a minimal PATH; merge the caller's PATH with
+// common locations (Homebrew etc.) so tmux and friends are found.
+export function buildAgentPath(envPath: string | undefined): string {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const entry of [...(envPath ? envPath.split(":") : []), ...DEFAULT_AGENT_PATH]) {
+    if (!entry || seen.has(entry)) continue
+    seen.add(entry)
+    out.push(entry)
+  }
+  return out.join(":")
+}
+
+export function buildPlist(avPath: string, envPath: string): string {
   const log = esc(monitorLogFile())
   const escAvPath = esc(avPath)
+  const escEnvPath = esc(envPath)
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -41,7 +57,15 @@ export function buildPlist(avPath: string): string {
   <key>RunAtLoad</key>
   <true/>
   <key>KeepAlive</key>
-  <true/>
+  <dict>
+    <key>SuccessfulExit</key>
+    <false/>
+  </dict>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>${escEnvPath}</string>
+  </dict>
   <key>StandardOutPath</key>
   <string>${log}</string>
   <key>StandardErrorPath</key>
@@ -103,7 +127,7 @@ export async function installAgent(): Promise<boolean> {
   const target = plistPath()
   fs.mkdirSync(path.dirname(target), { recursive: true })
   fs.mkdirSync(path.join(os.homedir(), ".agent-orchestrator"), { recursive: true })
-  fs.writeFileSync(target, buildPlist(resolveAvPath()))
+  fs.writeFileSync(target, buildPlist(resolveAvPath(), buildAgentPath(process.env.PATH)))
 
   const domain = `gui/${process.getuid?.() ?? 0}`
   const service = `${domain}/${LAUNCH_AGENT_LABEL}`
