@@ -92,6 +92,16 @@ if (process.platform === "darwin") {
   await $`codesign --sign - --force ${INSTALL_BIN}`
 }
 
+// Install/refresh the macOS status-monitor LaunchAgent.
+if (process.platform === "darwin") {
+  console.log("🛰  Installing status monitor (launchd)...")
+  try {
+    await $`${LOCAL_AV} monitor install`
+  } catch (e) {
+    console.warn("⚠️  Could not install status monitor; run 'av monitor install' manually.")
+  }
+}
+
 console.log(`✅ Installed to ${INSTALL_BIN}`)
 console.log(`🔗 Linked ${LOCAL_AGENT_VIEW} -> ${INSTALL_BIN}`)
 console.log(`🔗 Linked ${LOCAL_AV} -> ${INSTALL_BIN}`)

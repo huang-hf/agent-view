@@ -35,6 +35,12 @@ main() {
   echo -e "${BLUE}╰───────────────────────────────────╯${NC}"
   echo ""
 
+  # Remove the status-monitor LaunchAgent (macOS) while av is still present.
+  if [[ "$OSTYPE" == darwin* ]] && [ -x "$BIN_DIR/av" ]; then
+    log "Removing status monitor (launchd)..."
+    "$BIN_DIR/av" monitor uninstall >/dev/null 2>&1 || true
+  fi
+
   # Remove binaries
   if [ -f "$BIN_DIR/agent-view" ]; then
     log "Removing $BIN_DIR/agent-view..."

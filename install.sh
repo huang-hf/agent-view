@@ -303,6 +303,17 @@ if [[ "$no_modify_path" != "true" ]]; then
     fi
 fi
 
+# Install the macOS status-monitor LaunchAgent so session status stays fresh
+# even when no TUI is open or the TUI is attached inside a session.
+# Never abort the installer on failure.
+if [[ "$OSTYPE" == darwin* ]]; then
+    if "$INSTALL_DIR/av" monitor install >/dev/null 2>&1; then
+        echo -e "  ${GREEN}Status monitor installed (launchd)${NC}"
+    else
+        echo -e "  ${MUTED}Could not install status monitor (run 'av monitor install' manually)${NC}"
+    fi
+fi
+
 echo ""
 echo -e "${GREEN}Installation complete!${NC}"
 echo ""
