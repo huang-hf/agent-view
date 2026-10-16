@@ -31,6 +31,14 @@ import path from "path"
 
 const execAsync = promisify(exec)
 
+// Expand a leading ~ to $HOME. Git commands quote the path (git -C "..."),
+// so the shell never expands ~ for us; an unexpanded "~/foo" makes isGitRepo
+// wrongly report "not a repo" and hides the worktree option.
+function expandTilde(p: string): string {
+  if (p.startsWith("~")) return p.replace("~", process.env.HOME || "")
+  return p
+}
+
 async function commandExists(cmd: string, cwd?: string): Promise<boolean> {
   // For relative paths (./something), check if file exists in cwd
   if (cmd.startsWith("./") || cmd.startsWith("../")) {
@@ -172,7 +180,7 @@ export function DialogNew(props?: { prefill?: SavedFormState }) {
   })
 
   createEffect(async () => {
-    const dir = projectPath()
+    const dir = expandTilde(projectPath())
     try {
       const result = await isGitRepo(dir)
       setIsInGitRepo(result)
@@ -263,9 +271,7 @@ export function DialogNew(props?: { prefill?: SavedFormState }) {
         // The path lives on the remote server; let tmux handle ~ expansion.
       } else {
         // Local session: expand ~ and verify the directory exists
-        if (sessionProjectPath.startsWith("~")) {
-          sessionProjectPath = sessionProjectPath.replace("~", process.env.HOME || "")
-        }
+        sessionProjectPath = expandTilde(sessionProjectPath)
         if (!existsSync(sessionProjectPath)) {
           throw new Error(`Directory '${sessionProjectPath}' does not exist`)
         }
@@ -288,7 +294,7 @@ export function DialogNew(props?: { prefill?: SavedFormState }) {
 
       if (useWorktree() && isInGitRepo()) {
         setStatusMessage("Creating worktree...")
-        const repoRoot = await getRepoRoot(projectPath())
+        const repoRoot = await getRepoRoot(expandTilde(projectPath()))
         const branchName = worktreeBranch()
           ? sanitizeBranchName(worktreeBranch())
           : generateBranchName(title() || undefined)
