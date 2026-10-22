@@ -276,10 +276,12 @@ export class SessionManager {
 
     // Heartbeat: keep our record alive so other instances can detect us
     const heartbeatInterval = setInterval(() => {
+      if (storage.isClosed()) return
       storage.heartbeat()
     }, 5000)
 
     this.refreshInterval = setInterval(async () => {
+      if (storage.isClosed()) return
       // Heartbeat first so we never clean up our own row after sleep/wake
       storage.heartbeat()
       // Clean up dead instances (missed 3 heartbeats = 15s)

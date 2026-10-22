@@ -319,6 +319,17 @@ describe("config", () => {
       expect(files.filter((f) => f.includes(".tmp-"))).toHaveLength(0)
     })
 
+    test("concurrent writes both resolve and leave exactly one payload", async () => {
+      const A = JSON.stringify({ big: "a".repeat(200_000) })
+      const B = JSON.stringify({ small: 1 })
+      for (let i = 0; i < 50; i++) {
+        await Promise.all([writeFileAtomic(testConfigPath, A), writeFileAtomic(testConfigPath, B)])
+        const content = await fs.readFile(testConfigPath, "utf-8")
+        expect(content === A || content === B).toBe(true)
+        expect((await fs.readdir(testConfigDir)).filter((f) => f.includes(".tmp-"))).toHaveLength(0)
+      }
+    })
+
     test("overwrites an existing file", async () => {
       await fs.writeFile(testConfigPath, "old-content-that-is-longer", "utf-8")
       await writeFileAtomic(testConfigPath, "new")
