@@ -122,6 +122,16 @@ class PluginTest(unittest.TestCase):
         self.assertEqual(len(lines), 2)
         self.assertTrue(all("error" in l for l in lines))
 
+    def test_corrupt_sidecar_is_tolerated(self):
+        self.sessions_av([{"id": "a", "title": "t", "status": "idle"}])
+        self.write_config(["a"])
+        with open(self.log + ".last", "wb") as f:
+            f.write(b"\xe2\x97")
+        self.run_plugin()
+        self.assertEqual(len(self.log_lines()), 1)
+        with open(self.log + ".last", encoding="utf-8") as f:
+            self.assertEqual(f.read(), "○1")
+
     def test_recovery_after_error_is_logged(self):
         self.sessions_av([])
         self.run_plugin()

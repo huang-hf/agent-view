@@ -123,7 +123,7 @@ def log_run(status, w=0, r=0, i=0, b=0, cur=0, error="", title=""):
                 with open(last_path, encoding="utf-8") as f:
                     if f.read() == title:
                         return
-            except OSError:
+            except Exception:
                 pass
         os.makedirs(os.path.dirname(LOG_PATH), exist_ok=True)
         line = f"{datetime.now().astimezone().isoformat(timespec='seconds')}  {status}  w={w} r={r} i={i} b={b} cur={cur}"
