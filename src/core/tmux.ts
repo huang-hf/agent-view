@@ -42,7 +42,7 @@ export class LocalTmuxExecutor implements TmuxExecutor {
   async exec(args: string[]): Promise<string> {
     ensureConfig()
     const { stdout } = await execAsync(
-      `tmux -u -L ${TMUX_SOCKET} -f "${CONFIG_PATH}" ${args.join(" ")}`
+      `${tmuxCommandPrefix()} ${args.join(" ")}`
     )
     return stdout
   }
@@ -156,7 +156,15 @@ export function tmuxBaseArgs(): string[] {
  */
 function tmuxCmd(subcmd: string): string {
   ensureConfig()
-  return `tmux -u -L ${TMUX_SOCKET} -f "${CONFIG_PATH}" ${subcmd}`
+  return `${tmuxCommandPrefix()} ${subcmd}`
+}
+
+/**
+ * Shell-command prefix for our isolated server, built from tmuxBaseArgs() so
+ * string-built commands (exec/tmuxCmd) can't drift from the spawn path.
+ */
+export function tmuxCommandPrefix(): string {
+  return ["tmux", ...tmuxBaseArgs().map(shellQuote)].join(" ")
 }
 
 /**

@@ -11,6 +11,7 @@ import {
   LocalTmuxExecutor,
   localExecutor,
   tmuxBaseArgs,
+  tmuxCommandPrefix,
 } from "./tmux"
 
 // Note: We need to access the internal sessionCache for testing
@@ -370,5 +371,9 @@ describe("tmux UTF-8 output", () => {
   // UTF-8 output regardless of LANG/LC_*.
   test("every local tmux invocation forces UTF-8 with -u", () => {
     expect(tmuxBaseArgs()[0]).toBe("-u")
+  })
+
+  test("string-built commands (list-windows etc.) share the -u prefix", () => {
+    expect(tmuxCommandPrefix()).toMatch(/^tmux '-u' '-L' 'agent-view' '-f' /)
   })
 })
