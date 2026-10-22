@@ -38,8 +38,8 @@ HOME = os.path.expanduser("~")
 # Env overrides exist for tests: AV_SWIFTBAR_CONFIG / AV_SWIFTBAR_LOG / AV_SWIFTBAR_AV
 CONFIG_PATH = os.environ.get("AV_SWIFTBAR_CONFIG") or os.path.join(HOME, ".agent-view", "config.json")
 LOG_PATH = os.environ.get("AV_SWIFTBAR_LOG") or os.path.join(HOME, ".agent-orchestrator", "swiftbar.log")
-LOG_MAX_LINES = 1000
-LOG_KEEP_LINES = 500
+LOG_MAX_LINES = 4000
+LOG_KEEP_LINES = 2000
 
 # Status glyphs matching the agent-view TUI (src/tui/util/status.ts), plus the
 # per-status colors it uses. These render in the system menu-bar font, so the
@@ -112,15 +112,28 @@ def load_current_ids():
     raise RuntimeError(f"config.json unreadable: {last}")
 
 
-def log_run(status, w=0, r=0, i=0, b=0, cur=0, error=""):
+def log_run(status, w=0, r=0, i=0, b=0, cur=0, error="", title=""):
     # Never raises: logging must not break the plugin.
+    # Errors are always logged; ok runs only when the rendered title changed
+    # since the last logged ok run (remembered in a "<log>.last" sidecar).
     try:
+        last_path = LOG_PATH + ".last"
+        if status == "ok":
+            try:
+                with open(last_path, encoding="utf-8") as f:
+                    if f.read() == title:
+                        return
+            except OSError:
+                pass
         os.makedirs(os.path.dirname(LOG_PATH), exist_ok=True)
         line = f"{datetime.now().astimezone().isoformat(timespec='seconds')}  {status}  w={w} r={r} i={i} b={b} cur={cur}"
         if error:
             line += "  " + error.replace("\n", " ")
         with open(LOG_PATH, "a", encoding="utf-8") as f:
             f.write(line + "\n")
+        with open(last_path, "w", encoding="utf-8") as f:
+            # After an error, clear so the next ok run (recovery) is logged.
+            f.write(title if status == "ok" else "")
         with open(LOG_PATH, encoding="utf-8") as f:
             lines = f.readlines()
         if len(lines) > LOG_MAX_LINES:
@@ -158,7 +171,6 @@ def main():
     r = counts.get("running", 0)
     idle = counts.get("idle", 0)
     blocked = counts.get("blocked", 0)
-    log_run("ok", w, r, idle, blocked, len(cur))
 
     # Menu-bar title: agent-view glyphs, only non-zero active counts so it stays
     # calm until a session needs you. When any session is waiting, the whole
@@ -173,6 +185,7 @@ def main():
     if blocked:
         segs.append(f"⧗{blocked}")
     title = " ".join(segs) if segs else "◌"
+    log_run("ok", w, r, idle, blocked, len(cur), title=title)
     # When something is waiting on you, the whole title turns orange AND larger
     # so the ◐ is unmissable; otherwise it stays calm at the default size.
     print(f"{title} | color=orange size=16" if w else title)

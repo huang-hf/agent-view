@@ -90,11 +90,46 @@ class PluginTest(unittest.TestCase):
     def test_log_is_trimmed(self):
         self.sessions_av([])
         with open(self.log, "w") as f:
-            f.write("old\n" * 1000)
+            f.write("old\n" * 4001)
         self.run_plugin()
         with open(self.log) as f:
             n = len(f.readlines())
-        self.assertEqual(n, 500)
+        self.assertEqual(n, 2000)
+
+    def log_lines(self):
+        return self.read_log().strip().splitlines()
+
+    def test_identical_ok_runs_logged_once(self):
+        self.sessions_av([{"id": "a", "title": "t", "status": "idle"}])
+        self.write_config(["a"])
+        self.run_plugin()
+        self.run_plugin()
+        self.assertEqual(len(self.log_lines()), 1)
+
+    def test_changed_state_logged_again(self):
+        self.sessions_av([{"id": "a", "title": "t", "status": "idle"}])
+        self.write_config(["a"])
+        self.run_plugin()
+        self.sessions_av([{"id": "a", "title": "t", "status": "running"}])
+        self.run_plugin()
+        self.assertEqual(len(self.log_lines()), 2)
+
+    def test_errors_always_logged(self):
+        self.fake_av("echo boom >&2; exit 1")
+        self.run_plugin()
+        self.run_plugin()
+        lines = self.log_lines()
+        self.assertEqual(len(lines), 2)
+        self.assertTrue(all("error" in l for l in lines))
+
+    def test_recovery_after_error_is_logged(self):
+        self.sessions_av([])
+        self.run_plugin()
+        self.fake_av("exit 1")
+        self.run_plugin()
+        self.sessions_av([])
+        self.run_plugin()
+        self.assertEqual(len(self.log_lines()), 3)
 
 
 if __name__ == "__main__":
