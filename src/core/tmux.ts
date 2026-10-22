@@ -42,7 +42,7 @@ export class LocalTmuxExecutor implements TmuxExecutor {
   async exec(args: string[]): Promise<string> {
     ensureConfig()
     const { stdout } = await execAsync(
-      `tmux -L ${TMUX_SOCKET} -f "${CONFIG_PATH}" ${args.join(" ")}`
+      `tmux -u -L ${TMUX_SOCKET} -f "${CONFIG_PATH}" ${args.join(" ")}`
     )
     return stdout
   }
@@ -142,11 +142,21 @@ function ensureConfig(): void {
 }
 
 /**
+ * Base tmux arguments that target our isolated server. `-u` forces UTF-8
+ * output: without a UTF-8 locale (e.g. the launchd-managed monitor has no
+ * LANG) tmux replaces the tab in `-F` formats with "_", which silently breaks
+ * the session cache and freezes every status.
+ */
+export function tmuxBaseArgs(): string[] {
+  return ["-u", "-L", TMUX_SOCKET, "-f", CONFIG_PATH]
+}
+
+/**
  * Build a tmux command string that targets our isolated server
  */
 function tmuxCmd(subcmd: string): string {
   ensureConfig()
-  return `tmux -L ${TMUX_SOCKET} -f "${CONFIG_PATH}" ${subcmd}`
+  return `tmux -u -L ${TMUX_SOCKET} -f "${CONFIG_PATH}" ${subcmd}`
 }
 
 /**
@@ -154,7 +164,7 @@ function tmuxCmd(subcmd: string): string {
  */
 function tmuxSpawnArgs(...args: string[]): string[] {
   ensureConfig()
-  return ["-L", TMUX_SOCKET, "-f", CONFIG_PATH, ...args]
+  return [...tmuxBaseArgs(), ...args]
 }
 
 function shellQuote(value: string): string {

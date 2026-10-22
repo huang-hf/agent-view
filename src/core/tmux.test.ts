@@ -10,6 +10,7 @@ import {
   isSessionActive,
   LocalTmuxExecutor,
   localExecutor,
+  tmuxBaseArgs,
 } from "./tmux"
 
 // Note: We need to access the internal sessionCache for testing
@@ -360,5 +361,14 @@ describe("LocalTmuxExecutor", () => {
 
   test("localExecutor is a LocalTmuxExecutor instance", () => {
     expect(localExecutor).toBeInstanceOf(LocalTmuxExecutor)
+  })
+})
+
+describe("tmux UTF-8 output", () => {
+  // Without a UTF-8 locale (e.g. under launchd), tmux replaces the tab in
+  // list-windows output with "_", so the session cache never matches. -u forces
+  // UTF-8 output regardless of LANG/LC_*.
+  test("every local tmux invocation forces UTF-8 with -u", () => {
+    expect(tmuxBaseArgs()[0]).toBe("-u")
   })
 })
