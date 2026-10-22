@@ -17,6 +17,7 @@ import { getConfig, saveConfig } from "./config"
 import { paginateTranscript, type TranscriptPageOptions } from "./transcript"
 import { deleteScratchpad } from "./scratchpad"
 import { debugLog } from "./debug-log"
+import { auditLog, type DeleteSource } from "./audit-log"
 
 function log(...args: unknown[]) {
   debugLog("SESSION", ...args)
@@ -658,10 +659,20 @@ export class SessionManager {
     await saveConfig({ ...config, recents })
   }
 
-  async delete(sessionId: string, options?: { deleteWorktree?: boolean }): Promise<void> {
+  async delete(sessionId: string, options?: { deleteWorktree?: boolean; source?: DeleteSource }): Promise<void> {
     this.pauseRefresh()
     const storage = getStorage()
     const session = storage.getSession(sessionId)
+
+    auditLog("session.delete", {
+      id: sessionId,
+      title: session?.title,
+      tool: session?.tool,
+      status: session?.status,
+      projectPath: session?.projectPath,
+      deleteWorktree: !!options?.deleteWorktree,
+      source: options?.source ?? "unknown",
+    })
 
     if (session?.tmuxSession) {
       if (session.remoteHost) {
