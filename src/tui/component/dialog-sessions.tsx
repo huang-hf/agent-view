@@ -119,9 +119,9 @@ export function DialogSessions() {
         <DialogSelect
           title={`Delete "${session.title}"?`}
           options={[
+            { title: "Cancel", value: "cancel" },
             { title: "Delete session and worktree", value: "delete-worktree" },
             { title: "Delete session only", value: "delete-session" },
-            { title: "Cancel", value: "cancel" },
           ]}
           onSelect={async (opt) => {
             dialog.pop()
@@ -137,8 +137,8 @@ export function DialogSessions() {
       <DialogSelect
         title={`Delete "${session.title}"?`}
         options={[
-          { title: "Delete session", value: "delete-session" },
           { title: "Cancel", value: "cancel" },
+          { title: "Delete session", value: "delete-session" },
         ]}
         onSelect={async (opt) => {
           dialog.pop()
