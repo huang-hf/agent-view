@@ -69,3 +69,41 @@ describe("Task CRUD", () => {
     expect(tasks[1].id).toBe("b")
   })
 })
+
+describe("heartbeat", () => {
+  let storage: Storage
+
+  beforeEach(() => {
+    storage = new Storage({ dbPath: ":memory:" })
+    storage.migrate()
+  })
+
+  afterEach(() => {
+    storage.close()
+  })
+
+  const rows = () => (storage as any).db.prepare("SELECT * FROM heartbeats WHERE pid = ?").all(process.pid) as any[]
+
+  test("heartbeat re-creates the row if it was cleaned", () => {
+    storage.registerInstance(false)
+    ;(storage as any).db.prepare("DELETE FROM heartbeats").run()
+    expect(rows()).toHaveLength(0)
+    storage.heartbeat()
+    const r = rows()
+    expect(r).toHaveLength(1)
+    expect(Math.abs(r[0].heartbeat - Math.floor(Date.now() / 1000))).toBeLessThanOrEqual(2)
+  })
+
+  test("heartbeat preserves started and is_primary on existing row", () => {
+    storage.registerInstance(false)
+    ;(storage as any).db.prepare("UPDATE heartbeats SET started = started - 100, heartbeat = heartbeat - 50").run()
+    expect(storage.electPrimary(15)).toBe(true)
+    const before = rows()[0]
+    expect(before.is_primary).toBe(1)
+    storage.heartbeat()
+    const after = rows()[0]
+    expect(after.is_primary).toBe(1)
+    expect(after.started).toBe(before.started)
+    expect(after.heartbeat).toBeGreaterThan(before.heartbeat)
+  })
+})

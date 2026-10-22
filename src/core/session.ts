@@ -279,6 +279,8 @@ export class SessionManager {
     }, 5000)
 
     this.refreshInterval = setInterval(async () => {
+      // Heartbeat first so we never clean up our own row after sleep/wake
+      storage.heartbeat()
       // Clean up dead instances (missed 3 heartbeats = 15s)
       storage.cleanDeadInstances(15)
       // Only the elected primary writes session statuses
