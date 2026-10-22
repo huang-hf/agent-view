@@ -164,11 +164,11 @@ export function getConfig(): AppConfig {
   return cachedConfig
 }
 
+let tmpCounter = 0
+
 /**
  * Write via a temp file + rename so concurrent readers never see a truncated file.
  */
-let tmpCounter = 0
-
 export async function writeFileAtomic(filePath: string, content: string): Promise<void> {
   // Unique per call so overlapping writes in the same process don't share a tmp file
   const tmp = `${filePath}.tmp-${process.pid}-${++tmpCounter}`
