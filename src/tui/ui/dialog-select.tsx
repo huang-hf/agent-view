@@ -196,7 +196,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
 
     // Handle custom keybinds
     for (const kb of props.keybinds ?? []) {
-      if (evt.name === kb.key) {
+      if (evt.name === kb.key && !evt.ctrl && !evt.meta) {
         const s = selected()
         if (s) {
           evt.preventDefault()

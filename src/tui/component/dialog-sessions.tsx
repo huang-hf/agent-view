@@ -121,9 +121,11 @@ export function DialogSessions() {
           options={[
             { title: "Delete session and worktree", value: "delete-worktree" },
             { title: "Delete session only", value: "delete-session" },
+            { title: "Cancel", value: "cancel" },
           ]}
           onSelect={async (opt) => {
             dialog.pop()
+            if (opt.value === "cancel") return
             await doDelete(opt.value === "delete-worktree")
           }}
         />
@@ -131,7 +133,20 @@ export function DialogSessions() {
       return
     }
 
-    await doDelete(false)
+    dialog.push(() => (
+      <DialogSelect
+        title={`Delete "${session.title}"?`}
+        options={[
+          { title: "Delete session", value: "delete-session" },
+          { title: "Cancel", value: "cancel" },
+        ]}
+        onSelect={async (opt) => {
+          dialog.pop()
+          if (opt.value === "cancel") return
+          await doDelete(false)
+        }}
+      />
+    ))
   }
 
   async function handleRestart(sessionId: string) {

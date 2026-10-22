@@ -489,9 +489,11 @@ export function Home() {
           options={[
             { title: "Delete session and worktree", value: "delete-worktree" },
             { title: "Delete session only", value: "delete-session" },
+            { title: "Cancel", value: "cancel" },
           ]}
           onSelect={async (opt) => {
             dialog.clear()
+            if (opt.value === "cancel") return
             try {
               await sync.session.delete(session.id, { deleteWorktree: opt.value === "delete-worktree" })
               const msg = opt.value === "delete-worktree"
@@ -506,12 +508,25 @@ export function Home() {
       ))
       return
     }
-    try {
-      await sync.session.delete(session.id)
-      toast.show({ message: `Deleted ${session.title}`, variant: "info", duration: 2000 })
-    } catch (err) {
-      toast.error(err as Error)
-    }
+    dialog.replace(() => (
+      <DialogSelect
+        title={`Delete "${session.title}"?`}
+        options={[
+          { title: "Delete session", value: "delete-session" },
+          { title: "Cancel", value: "cancel" },
+        ]}
+        onSelect={async (opt) => {
+          dialog.clear()
+          if (opt.value === "cancel") return
+          try {
+            await sync.session.delete(session.id)
+            toast.show({ message: `Deleted ${session.title}`, variant: "info", duration: 2000 })
+          } catch (err) {
+            toast.error(err as Error)
+          }
+        }}
+      />
+    ))
   }
 
   async function handleRestart(session: Session) {
@@ -640,7 +655,7 @@ export function Home() {
     }
 
     // d to delete session OR group
-    if (evt.name === "d") {
+    if (evt.name === "d" && !evt.ctrl && !evt.meta) {
       const item = selectedItem()
       if (item?.type === "session" && item.session) {
         handleDelete(item.session)
