@@ -28,7 +28,7 @@ const DEFAULT_KEYBINDS: KeybindConfig = {
   help: ["?", "<leader>h"],
   quit: ["ctrl+q", "<leader>q"],
   detach: ["q", "escape"],
-  delete: ["d", "ctrl+d"],
+  delete: ["d"],
   restart: ["r", "ctrl+r"],
   open_shortcuts: ["s", "<leader>s"]
 }

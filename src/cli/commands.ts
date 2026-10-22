@@ -260,7 +260,7 @@ export async function cmdDelete(id: string, worktree: boolean, force: boolean): 
   }
 
   const manager = new SessionManager()
-  await manager.delete(resolvedId, { deleteWorktree: worktree })
+  await manager.delete(resolvedId, { deleteWorktree: worktree, source: "cli" })
   console.log(`Deleted session: ${session.title} (${resolvedId})`)
 }
 

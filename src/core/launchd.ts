@@ -65,6 +65,8 @@ export function buildPlist(avPath: string, envPath: string): string {
   <dict>
     <key>PATH</key>
     <string>${escEnvPath}</string>
+    <key>LANG</key>
+    <string>en_US.UTF-8</string>
   </dict>
   <key>StandardOutPath</key>
   <string>${log}</string>

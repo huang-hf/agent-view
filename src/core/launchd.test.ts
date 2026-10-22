@@ -36,3 +36,9 @@ test("buildAgentPath dedups, preserves order, and always has defaults", () => {
   }
   expect(buildAgentPath(undefined)).toContain("/opt/homebrew/bin")
 })
+
+test("buildPlist sets a UTF-8 LANG so tmux output isn't mangled", () => {
+  const xml = buildPlist("/x/av", "/usr/bin")
+  expect(xml).toContain("<key>LANG</key>")
+  expect(xml).toContain("<string>en_US.UTF-8</string>")
+})

@@ -425,8 +425,11 @@ export class Storage {
 
   heartbeat(): void {
     const now = Math.floor(Date.now() / 1000)
-    const stmt = this.db.prepare("UPDATE heartbeats SET heartbeat = ? WHERE pid = ?")
-    stmt.run(now, this.pid)
+    this.db.prepare(`
+      INSERT INTO heartbeats (pid, started, heartbeat, is_primary)
+      VALUES (?, ?, ?, 0)
+      ON CONFLICT(pid) DO UPDATE SET heartbeat = excluded.heartbeat
+    `).run(this.pid, now, now)
   }
 
   unregisterInstance(): void {

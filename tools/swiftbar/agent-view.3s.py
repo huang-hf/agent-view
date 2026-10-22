@@ -30,10 +30,16 @@ import json
 import os
 import subprocess
 import sys
+import time
 from collections import Counter
+from datetime import datetime
 
 HOME = os.path.expanduser("~")
-CONFIG_PATH = os.path.join(HOME, ".agent-view", "config.json")
+# Env overrides exist for tests: AV_SWIFTBAR_CONFIG / AV_SWIFTBAR_LOG / AV_SWIFTBAR_AV
+CONFIG_PATH = os.environ.get("AV_SWIFTBAR_CONFIG") or os.path.join(HOME, ".agent-view", "config.json")
+LOG_PATH = os.environ.get("AV_SWIFTBAR_LOG") or os.path.join(HOME, ".agent-orchestrator", "swiftbar.log")
+LOG_MAX_LINES = 4000
+LOG_KEEP_LINES = 2000
 
 # Status glyphs matching the agent-view TUI (src/tui/util/status.ts), plus the
 # per-status colors it uses. These render in the system menu-bar font, so the
@@ -61,6 +67,9 @@ def display_status(s):
 
 
 def find_av():
+    override = os.environ.get("AV_SWIFTBAR_AV")
+    if override:
+        return override
     for p in (
         os.path.join(HOME, ".local", "bin", "av"),
         "/opt/homebrew/bin/av",
@@ -78,31 +87,82 @@ def load_sessions(av):
         text=True,
         timeout=8,
     )
-    return json.loads(out.stdout or "[]")
+    if out.returncode != 0 or out.stdout.strip() == "":
+        err = " / ".join((out.stderr or "").strip().splitlines()[:3])
+        raise RuntimeError(f"av exit {out.returncode}: {err}")
+    return json.loads(out.stdout)
 
 
 def load_current_ids():
-    try:
-        with open(CONFIG_PATH) as f:
-            return json.load(f).get("currentSessionIds") or []
-    except Exception:
+    # Missing file is legitimate (no Current). A present-but-unparseable file
+    # may be a mid-write read, so retry briefly before reporting failure.
+    if not os.path.exists(CONFIG_PATH):
         return []
+    last = None
+    for attempt in range(3):
+        try:
+            with open(CONFIG_PATH) as f:
+                return json.load(f).get("currentSessionIds") or []
+        except FileNotFoundError:
+            return []
+        except Exception as e:
+            last = e
+            if attempt < 2:
+                time.sleep(0.1)
+    raise RuntimeError(f"config.json unreadable: {last}")
+
+
+def log_run(status, w=0, r=0, i=0, b=0, cur=0, error="", title=""):
+    # Never raises: logging must not break the plugin.
+    # Errors are always logged; ok runs only when the rendered title changed
+    # since the last logged ok run (remembered in a "<log>.last" sidecar).
+    try:
+        last_path = LOG_PATH + ".last"
+        if status == "ok":
+            try:
+                with open(last_path, encoding="utf-8") as f:
+                    if f.read() == title:
+                        return
+            except Exception:
+                pass
+        os.makedirs(os.path.dirname(LOG_PATH), exist_ok=True)
+        line = f"{datetime.now().astimezone().isoformat(timespec='seconds')}  {status}  w={w} r={r} i={i} b={b} cur={cur}"
+        if error:
+            line += "  " + error.replace("\n", " ")
+        with open(LOG_PATH, "a", encoding="utf-8") as f:
+            f.write(line + "\n")
+        with open(last_path, "w", encoding="utf-8") as f:
+            # After an error, clear so the next ok run (recovery) is logged.
+            f.write(title if status == "ok" else "")
+        with open(LOG_PATH, encoding="utf-8") as f:
+            lines = f.readlines()
+        if len(lines) > LOG_MAX_LINES:
+            with open(LOG_PATH, "w", encoding="utf-8") as f:
+                f.writelines(lines[-LOG_KEEP_LINES:])
+    except Exception:
+        pass
+
+
+def print_error(msg):
+    print("⚠️ av")
+    print("---")
+    print(msg.replace("|", "¦").replace("\n", " "))
+    print("Refresh | refresh=true")
 
 
 def main():
     av = find_av()
     try:
         sessions = load_sessions(av)
-    except Exception:
-        # av unreachable — surface it quietly rather than crashing SwiftBar.
-        print("⚠️ av")
-        print("---")
-        print("agent-view not reachable")
-        print("Refresh | refresh=true")
+        current_ids = load_current_ids()
+    except Exception as e:
+        # av/config unreadable — show ⚠️ (not an empty ◌) and record why.
+        msg = str(e) or "agent-view not reachable"
+        log_run("error", error=msg)
+        print_error(msg)
         return
 
     by_id = {s.get("id"): s for s in sessions}
-    current_ids = load_current_ids()
     # Preserve the Current order; skip ids whose session no longer exists.
     cur = [by_id[i] for i in current_ids if i in by_id]
 
@@ -125,6 +185,7 @@ def main():
     if blocked:
         segs.append(f"⧗{blocked}")
     title = " ".join(segs) if segs else "◌"
+    log_run("ok", w, r, idle, blocked, len(cur), title=title)
     # When something is waiting on you, the whole title turns orange AND larger
     # so the ◐ is unmissable; otherwise it stays calm at the default size.
     print(f"{title} | color=orange size=16" if w else title)
@@ -150,8 +211,6 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as e:  # never let the plugin die silently
-        print("⚠️ av")
-        print("---")
-        print(f"error: {e}")
-        print("Refresh | refresh=true")
+        log_run("error", error=f"unexpected: {e}")
+        print_error(f"error: {e}")
         sys.exit(0)

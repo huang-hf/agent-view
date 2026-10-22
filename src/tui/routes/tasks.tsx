@@ -224,7 +224,7 @@ export function Tasks() {
       toggleDone()
       return stop(evt)
     }
-    if (evt.name === "d") {
+    if (evt.name === "d" && !evt.ctrl && !evt.meta) {
       deleteTask()
       return stop(evt)
     }

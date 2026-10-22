@@ -17,6 +17,7 @@ import { getConfig, saveConfig } from "./config"
 import { paginateTranscript, type TranscriptPageOptions } from "./transcript"
 import { deleteScratchpad } from "./scratchpad"
 import { debugLog } from "./debug-log"
+import { auditLog, type DeleteSource } from "./audit-log"
 
 function log(...args: unknown[]) {
   debugLog("SESSION", ...args)
@@ -275,10 +276,14 @@ export class SessionManager {
 
     // Heartbeat: keep our record alive so other instances can detect us
     const heartbeatInterval = setInterval(() => {
+      if (storage.isClosed()) return
       storage.heartbeat()
     }, 5000)
 
     this.refreshInterval = setInterval(async () => {
+      if (storage.isClosed()) return
+      // Heartbeat first so we never clean up our own row after sleep/wake
+      storage.heartbeat()
       // Clean up dead instances (missed 3 heartbeats = 15s)
       storage.cleanDeadInstances(15)
       // Only the elected primary writes session statuses
@@ -656,10 +661,20 @@ export class SessionManager {
     await saveConfig({ ...config, recents })
   }
 
-  async delete(sessionId: string, options?: { deleteWorktree?: boolean }): Promise<void> {
+  async delete(sessionId: string, options?: { deleteWorktree?: boolean; source?: DeleteSource }): Promise<void> {
     this.pauseRefresh()
     const storage = getStorage()
     const session = storage.getSession(sessionId)
+
+    auditLog("session.delete", {
+      id: sessionId,
+      title: session?.title,
+      tool: session?.tool,
+      status: session?.status,
+      projectPath: session?.projectPath,
+      deleteWorktree: !!options?.deleteWorktree,
+      source: options?.source ?? "unknown",
+    })
 
     if (session?.tmuxSession) {
       if (session.remoteHost) {

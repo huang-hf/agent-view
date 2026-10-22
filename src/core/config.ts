@@ -164,6 +164,23 @@ export function getConfig(): AppConfig {
   return cachedConfig
 }
 
+let tmpCounter = 0
+
+/**
+ * Write via a temp file + rename so concurrent readers never see a truncated file.
+ */
+export async function writeFileAtomic(filePath: string, content: string): Promise<void> {
+  // Unique per call so overlapping writes in the same process don't share a tmp file
+  const tmp = `${filePath}.tmp-${process.pid}-${++tmpCounter}`
+  try {
+    await fs.writeFile(tmp, content, "utf-8")
+    await fs.rename(tmp, filePath)
+  } catch (e) {
+    await fs.unlink(tmp).catch(() => {})
+    throw e
+  }
+}
+
 export async function saveConfig(config: AppConfig): Promise<void> {
   // Update the in-memory cache synchronously so getConfig() reflects the latest
   // intent immediately (callers that don't await still see it); the disk write
@@ -171,7 +188,7 @@ export async function saveConfig(config: AppConfig): Promise<void> {
   cachedConfig = config
   await ensureConfigDir()
   const content = JSON.stringify(config, null, 2)
-  await fs.writeFile(CONFIG_PATH, content, "utf-8")
+  await writeFileAtomic(CONFIG_PATH, content)
 }
 
 export function getConfigDir(): string {
